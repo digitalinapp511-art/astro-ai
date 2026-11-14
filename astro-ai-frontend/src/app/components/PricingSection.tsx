@@ -117,49 +117,67 @@ export default function PricingSection() {
         return;
       }
 
-      // 2. Call backend to create authentic Razorpay Order
-      const res = await subscriptionsApi.createMandate(
-        selectedUpiApp,
-        authUser?.userId || authUser?.id || "guest",
-        mandateConfig.trialSetupFee
-      );
+      // 2. Call local Next.js API route to create authentic Razorpay Order
+      let razorpayOrderId: string | undefined = undefined;
+      let keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
 
-      if (!res || !res.razorpayOrderId) {
-        setIsProcessing(false);
-        alert("Payment gateway se order create nahi ho saka. Kripya backend connection check karein.");
-        return;
+      try {
+        const orderRes = await fetch("/api/razorpay/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: mandateConfig.trialSetupFee,
+            userId: authUser?.userId || authUser?.id || "guest",
+            upiApp: selectedUpiApp,
+          }),
+        });
+
+        if (orderRes.ok) {
+          const orderData = await orderRes.json();
+          if (orderData?.orderId) {
+            razorpayOrderId = orderData.orderId;
+          }
+          if (orderData?.keyId) {
+            keyId = orderData.keyId;
+          }
+        }
+      } catch (err) {
+        console.warn("Server order creation fallback:", err);
       }
 
-      const keyId = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
-
-      // 3. Open official Razorpay Checkout Modal
-      const options = {
+      // 3. Configure official Razorpay Checkout Options
+      const options: any = {
         key: keyId,
         amount: Math.round(mandateConfig.trialSetupFee * 100),
         currency: "INR",
         name: "Uurja Vedic Astrology",
         description: `₹${mandateConfig.trialSetupFee} Setup Fee • ${mandateConfig.trialDays}-Day Free VIP Trial`,
         image: "/icon.png",
-        order_id: res.razorpayOrderId,
         handler: async function (response: any) {
           setIsProcessing(true);
           try {
             // 4. Strict Backend Signature Verification (HMAC-SHA256)
-            const verifyRes = await subscriptionsApi.verifyMandate({
-              mandateId: res.mandate?.mandateId || `mandate_${Date.now()}`,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              upiApp: selectedUpiApp,
-              userId: authUser?.userId || authUser?.id || "u-1",
-              userName: authUser?.name || "Seeker",
+            const verifyRes = await fetch("/api/razorpay/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mandateId: `mandate_${Date.now()}`,
+                razorpay_order_id: response.razorpay_order_id || razorpayOrderId,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                upiApp: selectedUpiApp,
+                userId: authUser?.userId || authUser?.id || "u-1",
+                userName: authUser?.name || "Seeker",
+              }),
             });
 
-            if (verifyRes && verifyRes.success) {
-              // 5. Success ONLY if backend verified signature!
+            const verifyData = await verifyRes.json();
+
+            if (verifyData && verifyData.success) {
+              // 5. Success ONLY if payment signature authenticated!
               activateVipStatus();
             } else {
-              alert("Payment verification fail ho gaya: " + (verifyRes?.message || "Invalid signature"));
+              alert("Payment verification fail ho gaya: " + (verifyData?.message || "Invalid signature"));
             }
           } catch (err: any) {
             console.error("Verification error:", err);
@@ -183,6 +201,10 @@ export default function PricingSection() {
         },
       };
 
+      if (razorpayOrderId) {
+        options.order_id = razorpayOrderId;
+      }
+
       const razorpayInstance = new (window as any).Razorpay(options);
       razorpayInstance.on("payment.failed", function (failResponse: any) {
         setIsProcessing(false);
@@ -190,6 +212,7 @@ export default function PricingSection() {
       });
 
       razorpayInstance.open();
+      setIsProcessing(false);
     } catch (err: any) {
       console.error("Payment initiation error:", err);
       setIsProcessing(false);
