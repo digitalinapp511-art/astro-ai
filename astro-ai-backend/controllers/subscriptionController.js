@@ -96,22 +96,28 @@ export const verifyMandate = async (req, res) => {
       userName 
     } = req.body;
 
-    // Verify HMAC-SHA256 signature if razorpay details are sent
-    if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
-      const generatedSignature = crypto
-        .createHmac("sha256", paymentConfig.razorpayKeySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest("hex");
-
-      if (generatedSignature !== razorpay_signature) {
-        console.warn("⚠️ [Razorpay] Invalid payment signature verification failed!");
-        return res.status(400).json({
-          success: false,
-          message: "Payment verification failed. Invalid signature!",
-        });
-      }
-      console.log(`✅ [Razorpay] Payment Signature Verified for Payment ID: ${razorpay_payment_id}`);
+    // Strict authentication: Require authentic Razorpay order ID, payment ID and signature
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      console.warn("⚠️ [Razorpay] Attempted activation without authentic Razorpay payment credentials!");
+      return res.status(400).json({
+        success: false,
+        message: "Real payment verification required! Payment ID and signature are missing.",
+      });
     }
+
+    const generatedSignature = crypto
+      .createHmac("sha256", paymentConfig.razorpayKeySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      console.warn("⚠️ [Razorpay] Invalid payment signature verification failed!");
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed. Invalid signature!",
+      });
+    }
+    console.log(`✅ [Razorpay] Real Payment Signature Authenticated! Payment ID: ${razorpay_payment_id}`);
 
     // Save mandate & subscription
     const subscription = MandateModel.createSubscription({

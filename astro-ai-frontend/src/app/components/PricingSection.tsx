@@ -10,7 +10,7 @@ import { subscriptionsApi } from "../services/apiClient";
 export default function PricingSection() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedUpiApp, setSelectedUpiApp] = useState("phonepe");
-  const [paymentStep, setPaymentStep] = useState<"choose" | "qr" | "success">("choose");
+  const [paymentStep, setPaymentStep] = useState<"choose" | "success">("choose");
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Mandate Configuration (Synced with Admin or Default)
@@ -109,98 +109,92 @@ export default function PricingSection() {
     } catch (e) {}
 
     try {
-      // 1. Load Razorpay Checkout SDK
+      // 1. Ensure official Razorpay Checkout SDK is loaded
       const isLoaded = await loadRazorpayScript();
+      if (!isLoaded || !(window as any).Razorpay) {
+        setIsProcessing(false);
+        alert("Razorpay payment gateway load nahi ho saka. Kripya page refresh karke dubara koshish karein.");
+        return;
+      }
 
-      // 2. Call backend to create Razorpay Order
+      // 2. Call backend to create authentic Razorpay Order
       const res = await subscriptionsApi.createMandate(
         selectedUpiApp,
         authUser?.userId || authUser?.id || "guest",
         mandateConfig.trialSetupFee
       );
 
-      if (isLoaded && (window as any).Razorpay && res && res.razorpayOrderId) {
-        const keyId = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
-        const options = {
-          key: keyId,
-          amount: Math.round(mandateConfig.trialSetupFee * 100),
-          currency: "INR",
-          name: "Uurja Vedic Astrology",
-          description: `₹${mandateConfig.trialSetupFee} Setup Fee • ${mandateConfig.trialDays}-Day Free VIP Trial`,
-          image: "/icon.png",
-          order_id: res.razorpayOrderId,
-          handler: async function (response: any) {
-            setIsProcessing(true);
-            try {
-              // 3. Verify Payment Signature with Backend (HMAC-SHA256)
-              await subscriptionsApi.verifyMandate({
-                mandateId: res.mandate?.mandateId || `mandate_${Date.now()}`,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                upiApp: selectedUpiApp,
-                userId: authUser?.userId || authUser?.id || "u-1",
-                userName: authUser?.name || "Seeker",
-              });
-
-              // 4. Activate VIP State
-              activateVipStatus();
-            } catch (err) {
-              console.error("Verification error:", err);
-              activateVipStatus();
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-          prefill: {
-            name: authUser?.name || "Devotee",
-            email: authUser?.email || "devotee@uurja.in",
-            contact: authUser?.phone || "9999999999",
-          },
-          theme: {
-            color: "#C05621",
-          },
-          modal: {
-            ondismiss: function () {
-              setIsProcessing(false);
-            },
-          },
-        };
-
-        const razorpayInstance = new (window as any).Razorpay(options);
-        razorpayInstance.on("payment.failed", function (failResponse: any) {
-          setIsProcessing(false);
-          alert(`Payment Failed: ${failResponse.error?.description || "Payment could not be processed"}`);
-        });
-
-        razorpayInstance.open();
+      if (!res || !res.razorpayOrderId) {
         setIsProcessing(false);
+        alert("Payment gateway se order create nahi ho saka. Kripya backend connection check karein.");
         return;
       }
-    } catch (err) {
-      console.warn("Razorpay flow fallback:", err);
-    }
 
-    setIsProcessing(false);
-    // Fallback to QR/intent if Razorpay popup fails to initialize
-    if (typeof window !== "undefined" && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      const upiUrl = `upi://pay?pa=astroai@upi&pn=AstroAI%20Vedic&am=${mandateConfig.trialSetupFee}.00&cu=INR&tn=VIP%20Trial%20Pass`;
-      window.location.href = upiUrl;
-    }
-    setPaymentStep("qr");
-  };
+      const keyId = res.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
 
-  const handleAuthorizeMandate = () => {
-    setIsProcessing(true);
+      // 3. Open official Razorpay Checkout Modal
+      const options = {
+        key: keyId,
+        amount: Math.round(mandateConfig.trialSetupFee * 100),
+        currency: "INR",
+        name: "Uurja Vedic Astrology",
+        description: `₹${mandateConfig.trialSetupFee} Setup Fee • ${mandateConfig.trialDays}-Day Free VIP Trial`,
+        image: "/icon.png",
+        order_id: res.razorpayOrderId,
+        handler: async function (response: any) {
+          setIsProcessing(true);
+          try {
+            // 4. Strict Backend Signature Verification (HMAC-SHA256)
+            const verifyRes = await subscriptionsApi.verifyMandate({
+              mandateId: res.mandate?.mandateId || `mandate_${Date.now()}`,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              upiApp: selectedUpiApp,
+              userId: authUser?.userId || authUser?.id || "u-1",
+              userName: authUser?.name || "Seeker",
+            });
 
-    // Call live backend API to verify & register mandate
-    subscriptionsApi.verifyMandate(`mandate_${Date.now()}`, selectedUpiApp, "u-1")
-      .catch((e) => console.warn("Backend mandate sync error", e));
+            if (verifyRes && verifyRes.success) {
+              // 5. Success ONLY if backend verified signature!
+              activateVipStatus();
+            } else {
+              alert("Payment verification fail ho gaya: " + (verifyRes?.message || "Invalid signature"));
+            }
+          } catch (err: any) {
+            console.error("Verification error:", err);
+            alert("Payment verify karne me dikkat aayi: " + (err.message || "Unknown error"));
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          name: authUser?.name || "Devotee",
+          email: authUser?.email || "devotee@uurja.in",
+          contact: authUser?.phone || "9999999999",
+        },
+        theme: {
+          color: "#C05621",
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+          },
+        },
+      };
 
-    setTimeout(() => {
+      const razorpayInstance = new (window as any).Razorpay(options);
+      razorpayInstance.on("payment.failed", function (failResponse: any) {
+        setIsProcessing(false);
+        alert(`Payment Failed: ${failResponse.error?.description || "Payment complete nahi ho saka"}`);
+      });
+
+      razorpayInstance.open();
+    } catch (err: any) {
+      console.error("Payment initiation error:", err);
       setIsProcessing(false);
-      activateVipStatus();
-    }, 1200);
+      alert("Payment gateway open karne me dikkat aayi: " + (err.message || "Please try again"));
+    }
   };
 
   const handleCancelAutoDebit = () => {
@@ -584,70 +578,8 @@ export default function PricingSection() {
                   <span>• Pehle {mandateConfig.trialDays} din cancel karne par aage koi deduction nahi hoga.</span>
                 </p>
               </div>
-            ) : paymentStep === "qr" ? (
-              /* QR Code & UPI App Trigger Step */
-              <div className="text-center py-2 space-y-4 animate-in fade-in">
-                <div className="flex items-center justify-between pb-2 border-b border-peach">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentStep("choose")}
-                    className="text-xs text-terracotta font-semibold hover:underline"
-                  >
-                    ← Back
-                  </button>
-                  <span className="text-xs font-bold text-espresso">UPI Payment Verification</span>
-                  <div className="w-8" />
-                </div>
-
-                <div className="p-3 bg-white rounded-2xl border border-peach shadow-sm inline-block mx-auto">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?data=upi%3A%2F%2Fpay%3Fpa%3Dastroai%40upi%26pn%3DAstroAI%26am%3D${mandateConfig.trialSetupFee}.00%26cu%3DINR&size=160x160`}
-                    alt="UPI Payment QR Code"
-                    className="w-40 h-40 mx-auto rounded-xl"
-                  />
-                  <p className="text-[11px] font-bold text-espresso mt-2">Scan & Pay ₹{mandateConfig.trialSetupFee}.00</p>
-                  <p className="text-[10px] text-espresso/60">PhonePe • Google Pay • Paytm • BHIM</p>
-                </div>
-
-                {/* Mobile App Open Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const upiUrl = `upi://pay?pa=astroai@upi&pn=AstroAI%20Vedic&am=${mandateConfig.trialSetupFee}.00&cu=INR&tn=VIP%20Trial%20Pass`;
-                    window.location.href = upiUrl;
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>Phone me {selectedUpiApp.toUpperCase()} App Kholein</span>
-                </button>
-
-                {/* Verify Button */}
-                <button
-                  type="button"
-                  disabled={isProcessing}
-                  onClick={handleAuthorizeMandate}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:opacity-95 text-white font-extrabold text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-70 cursor-pointer"
-                >
-                  {isProcessing ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Payment & Mandate Verify Ho Raha Hai...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Maine Pay Kar Diya • VIP Trial Shuru Karein</span>
-                    </>
-                  )}
-                </button>
-
-                <p className="text-[10px] text-espresso/60">
-                  ℹ️ Payment complete hone ke baad verify button par click karein.
-                </p>
-              </div>
             ) : (
-              /* Success Celebration State */
+              /* Success Celebration State - ONLY after real verified Razorpay payment! */
               <div className="text-center py-4 space-y-4 animate-in fade-in">
                 <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center border-2 border-emerald-300">
                   <CheckCircle2 className="w-10 h-10 animate-bounce" />

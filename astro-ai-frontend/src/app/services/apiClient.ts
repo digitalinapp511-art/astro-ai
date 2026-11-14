@@ -9,10 +9,10 @@ export const getBaseUrl = () => {
       return process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
     }
   }
-  return process.env.NEXT_PUBLIC_API_URL || "https://astro-ai-x5c6.onrender.com/api/v1";
+  return process.env.NEXT_PUBLIC_API_URL || "https://astro.uurja.in/api/v1";
 };
 
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://astro-ai-x5c6.onrender.com/api/v1";
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://astro.uurja.in/api/v1";
 
 // Generic request helper with fast timeout and fallback
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
