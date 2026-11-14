@@ -93,11 +93,15 @@ export const aiApi = {
   },
 };
 
-// 3. Subscriptions & ₹4 Auto-Debit Mandate API
+// 3. Subscriptions & ₹4 Auto-Debit Mandate API (Official Razorpay Integration)
 export const subscriptionsApi = {
   getConfig: async () => {
-    const data = await apiRequest<{ success: boolean; config: any }>("/subscriptions/config");
-    return data?.config || null;
+    const data = await apiRequest<{ success: boolean; config: any; razorpayKeyId?: string }>("/subscriptions/config");
+    if (!data?.config) return null;
+    return {
+      ...data.config,
+      razorpayKeyId: data.razorpayKeyId,
+    };
   },
   updateConfig: async (config: any) => {
     return await apiRequest<{ success: boolean; config: any }>("/subscriptions/config", {
@@ -105,16 +109,35 @@ export const subscriptionsApi = {
       body: JSON.stringify(config),
     });
   },
-  createMandate: async (upiApp: string) => {
-    return await apiRequest<{ success: boolean; mandate: any }>("/subscriptions/create-mandate", {
+  createMandate: async (upiApp: string = "razorpay", userId?: string, amount?: number) => {
+    return await apiRequest<{ 
+      success: boolean; 
+      keyId?: string;
+      razorpayOrderId?: string;
+      order?: any; 
+      mandate: any 
+    }>("/subscriptions/create-mandate", {
       method: "POST",
-      body: JSON.stringify({ upiApp }),
+      body: JSON.stringify({ upiApp, userId, amount }),
     });
   },
-  verifyMandate: async (mandateId: string, upiApp: string, userId?: string) => {
-    return await apiRequest<{ success: boolean; subscription: any }>("/subscriptions/verify-mandate", {
+  verifyMandate: async (payload: {
+    mandateId?: string;
+    razorpay_order_id?: string;
+    razorpay_payment_id?: string;
+    razorpay_signature?: string;
+    upiApp?: string;
+    userId?: string;
+    userName?: string;
+  } | string, upiAppArg?: string, userIdArg?: string) => {
+    // Support both object payload and legacy arguments
+    const bodyObj = typeof payload === "string" 
+      ? { mandateId: payload, upiApp: upiAppArg, userId: userIdArg }
+      : payload;
+
+    return await apiRequest<{ success: boolean; subscription: any; message?: string }>("/subscriptions/verify-mandate", {
       method: "POST",
-      body: JSON.stringify({ mandateId, upiApp, userId }),
+      body: JSON.stringify(bodyObj),
     });
   },
   cancelMandate: async (mandateId: string) => {

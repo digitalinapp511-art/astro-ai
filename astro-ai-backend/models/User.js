@@ -196,4 +196,24 @@ export const UserModel = {
     }
     return user;
   },
+
+  markVIP: async (id) => {
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await MongoUser.updateOne(
+          { $or: [{ userId: id }, { _id: mongoose.isValidObjectId(id) ? id : null }] },
+          { $set: { isVIP: true } }
+        );
+      }
+    } catch (e) {
+      console.warn("⚠️ [User Model] Atlas markVIP error:", e.message);
+    }
+
+    const user = usersStore.find((u) => u.id === id || u.userId === id);
+    if (user) {
+      user.isVIP = true;
+      saveData("users.json", usersStore);
+    }
+    return user;
+  },
 };
