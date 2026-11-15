@@ -14,22 +14,56 @@ export const getBaseUrl = () => {
 
 export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://astro.uurja.in/api/v1";
 
-// Generic request helper with fast timeout and fallback
+// Generic request helper with fast timeout, auto-JWT attachment, and safe error handling
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     const baseUrl = getBaseUrl();
+    
+    // Auto-attach JWT Authorization token if present in secure storage
+    let token: string | null = null;
+    if (typeof window !== "undefined") {
+      const isAdminRoute =
+        endpoint.startsWith("/admin") ||
+        endpoint.startsWith("/poojas/appointments") ||
+        (endpoint.startsWith("/users") && (endpoint.includes("/bonus") || endpoint.includes("/ban") || endpoint === "/users"));
+
+      if (isAdminRoute) {
+        token =
+          sessionStorage.getItem("astroai_admin_token") ||
+          localStorage.getItem("astroai_admin_token") ||
+          localStorage.getItem("astroai_auth_token");
+      } else {
+        token =
+          localStorage.getItem("astroai_auth_token") ||
+          sessionStorage.getItem("astroai_auth_token") ||
+          sessionStorage.getItem("astroai_admin_token");
+      }
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...((options.headers as Record<string, string>) || {}),
+    };
+
     const res = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       signal: options.signal || controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
+      headers,
     });
     clearTimeout(timeoutId);
+
+    if (res.status === 401) {
+      console.warn(`[API] 401 Unauthorized on ${endpoint}`);
+      if (typeof window !== "undefined" && endpoint.startsWith("/admin")) {
+        sessionStorage.removeItem("astroai_admin_token");
+        localStorage.removeItem("astroai_admin_token");
+      }
+      return null;
+    }
 
     if (!res.ok) {
       console.warn(`[API] Error ${res.status} on ${endpoint}`);
@@ -179,8 +213,15 @@ export const reelsApi = {
     try {
       const formData = new FormData();
       formData.append("video", file);
+
+      const token =
+        sessionStorage.getItem("astroai_admin_token") ||
+        localStorage.getItem("astroai_admin_token") ||
+        localStorage.getItem("astroai_auth_token");
+
       const res = await fetch(`${getBaseUrl()}/reels/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
       return await res.json();
@@ -191,29 +232,81 @@ export const reelsApi = {
   },
 };
 
-// 5. App Users API
+// 5. App Users API (Secured with 1-Hour JWT Auth)
 export const usersApi = {
   getAll: async () => {
     const data = await apiRequest<{ success: boolean; users: any[] }>("/users");
     return data?.users || null;
   },
   login: async (email: string, password?: string) => {
-    return await apiRequest<{ success: boolean; user?: any; token?: string; message?: string; code?: string }>("/users/login", {
+    const res = await apiRequest<{
+      success: boolean;
+      user?: any;
+      token?: string;
+      expiresIn?: number;
+      message?: string;
+      code?: string;
+    }>("/users/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+
+    if (res?.success && res?.token && typeof window !== "undefined") {
+      localStorage.setItem("astroai_auth_token", res.token);
+      if (res.user) {
+        localStorage.setItem("astroai_auth_user", JSON.stringify(res.user));
+        window.dispatchEvent(new Event("astroai_user_updated"));
+      }
+    }
+    return res;
   },
   signup: async (name: string, email: string, password?: string) => {
-    return await apiRequest<{ success: boolean; user?: any; token?: string; message?: string; code?: string }>("/users/signup", {
+    const res = await apiRequest<{
+      success: boolean;
+      user?: any;
+      token?: string;
+      expiresIn?: number;
+      message?: string;
+      code?: string;
+    }>("/users/signup", {
       method: "POST",
       body: JSON.stringify({ name, email, password }),
     });
+
+    if (res?.success && res?.token && typeof window !== "undefined") {
+      localStorage.setItem("astroai_auth_token", res.token);
+      if (res.user) {
+        localStorage.setItem("astroai_auth_user", JSON.stringify(res.user));
+        window.dispatchEvent(new Event("astroai_user_updated"));
+      }
+    }
+    return res;
   },
   logout: async (token?: string) => {
-    return await apiRequest<{ success: boolean; message: string }>("/users/logout", {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    try {
+      const activeToken =
+        token ||
+        (typeof window !== "undefined"
+          ? localStorage.getItem("astroai_auth_token") || sessionStorage.getItem("astroai_auth_token")
+          : null);
+
+      await apiRequest<{ success: boolean; message: string }>("/users/logout", {
+        method: "POST",
+        headers: activeToken ? { Authorization: `Bearer ${activeToken}` } : {},
+      });
+    } finally {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("astroai_auth_token");
+        localStorage.removeItem("astroai_auth_user");
+        sessionStorage.removeItem("astroai_auth_token");
+        sessionStorage.removeItem("astroai_session_token");
+        sessionStorage.removeItem("astroai_session_user");
+        window.dispatchEvent(new Event("astroai_user_updated"));
+      }
+    }
+  },
+  verifySession: async () => {
+    return await apiRequest<{ success: boolean; user?: any }>("/users/verify-session");
   },
   addBonus: async (id: string, amount: number) => {
     return await apiRequest<{ success: boolean; walletBalance: number }>(`/users/${id}/bonus`, {
@@ -228,7 +321,7 @@ export const usersApi = {
   },
 };
 
-// 6. Master Admin API
+// 6. Master Admin API (RBAC & Admin JWT Token Management)
 export const adminApi = {
   getAnalytics: async () => {
     const data = await apiRequest<{ success: boolean; metrics: any }>("/admin/analytics");
@@ -261,10 +354,22 @@ export const adminApi = {
     });
   },
   login: async (pin: string) => {
-    return await apiRequest<{ success: boolean; token: string; message: string }>("/admin/login", {
+    const res = await apiRequest<{ success: boolean; token: string; expiresIn?: number; message: string }>("/admin/login", {
       method: "POST",
       body: JSON.stringify({ pin }),
     });
+
+    if (res?.success && res.token && typeof window !== "undefined") {
+      sessionStorage.setItem("astroai_admin_token", res.token);
+      localStorage.setItem("astroai_admin_token", res.token);
+    }
+    return res;
+  },
+  logout: () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("astroai_admin_token");
+      localStorage.removeItem("astroai_admin_token");
+    }
   },
   changePin: async (currentPin: string, newPin: string) => {
     return await apiRequest<{ success: boolean; message: string; newPin?: string }>("/admin/change-pin", {

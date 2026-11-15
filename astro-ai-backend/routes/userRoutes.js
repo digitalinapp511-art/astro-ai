@@ -9,17 +9,24 @@ import {
   addBonusBalance,
   toggleBanUser,
 } from "../controllers/userController.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { authLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
-router.get("/", getAllUsers);
-router.post("/login", loginUser);
-router.post("/signup", signupUser);
-router.post("/register", signupUser);
-router.post("/logout", logoutUser);
-router.get("/verify-session", verifySession);
-router.put("/profile/name", updateUserName);
-router.post("/:id/bonus", addBonusBalance);
-router.put("/:id/ban", toggleBanUser);
+// Public auth endpoints protected by rate limiting against brute force
+router.post("/login", authLimiter, loginUser);
+router.post("/signup", authLimiter, signupUser);
+router.post("/register", authLimiter, signupUser);
+
+// Protected user session endpoints (require valid 1-hour JWT token)
+router.post("/logout", requireAuth, logoutUser);
+router.get("/verify-session", requireAuth, verifySession);
+router.put("/profile/name", requireAuth, updateUserName);
+
+// Administrative endpoints (strictly require Admin role)
+router.get("/", requireAdmin, getAllUsers);
+router.post("/:id/bonus", requireAdmin, addBonusBalance);
+router.put("/:id/ban", requireAdmin, toggleBanUser);
 
 export default router;

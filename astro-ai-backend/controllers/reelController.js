@@ -3,17 +3,21 @@ import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { ReelModel } from "../models/Reel.js";
 
-// Multer in-memory storage for high-speed streaming
+// Multer in-memory storage for high-speed streaming with strict MIME & extension verification
 const storage = multer.memoryStorage();
 export const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB max video size
   fileFilter: (req, file, cb) => {
-    const allowed = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"];
-    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(mp4|webm|mov|m4v)$/i)) {
+    const allowedMimes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"];
+    const hasValidExt = /\.(mp4|webm|mov|m4v)$/i.test(file.originalname);
+    const hasValidMime = allowedMimes.includes(file.mimetype);
+
+    // Require BOTH valid MIME type and extension (prevent extension spoofing)
+    if (hasValidMime && hasValidExt) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only MP4, WebM, and MOV video formats are allowed."));
+      cb(new Error("Invalid file type. Only authentic MP4, WebM, and MOV video files are allowed."));
     }
   },
 });

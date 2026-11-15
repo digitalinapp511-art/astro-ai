@@ -1,10 +1,16 @@
-// User Profile and Session Controller (MongoDB Atlas Synced)
-import { UserModel } from "../models/User.js";
-import crypto from "crypto";
+// User Profile and Session Controller (Secured with Cryptographic JWT & Password Hashing)
+import { UserModel, sanitizeUser } from "../models/User.js";
+import {
+  generateUserToken,
+  comparePassword,
+  hashPassword,
+  revokeToken,
+  JWT_EXPIRY_SECONDS,
+} from "../config/security.js";
 
-// Active in-memory session tokens for revocation
-const activeSessions = new Set();
-
+/**
+ * GET All Users (Admin Only)
+ */
 export const getAllUsers = async (req, res) => {
   try {
     const users = await UserModel.find();
@@ -14,19 +20,23 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+/**
+ * POST Login User
+ * Generates 1-hour JWT token and verifies password with bcrypt
+ */
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email) {
+    if (!email || typeof email !== "string") {
       return res.status(400).json({ success: false, message: "Valid email is required" });
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const user = await UserModel.findByEmail(cleanEmail);
+    // Retrieve user including password field for verification
+    const userWithPassword = await UserModel.findByEmail(cleanEmail, true);
 
-    // STRICT LOGIN CHECK: Do NOT create user if not found!
-    if (!user) {
+    if (!userWithPassword) {
       return res.status(404).json({
         success: false,
         code: "USER_NOT_FOUND",
@@ -34,39 +44,85 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Optional password verification if stored
-    if (user.password && password && user.password !== password) {
-      return res.status(401).json({
+    if (userWithPassword.isBanned) {
+      return res.status(403).json({
         success: false,
-        code: "INVALID_PASSWORD",
-        message: "Incorrect password. Please try again.",
+        code: "ACCOUNT_BANNED",
+        message: "This account has been suspended.",
       });
     }
 
-    console.log(`🍃 [Auth] User logged in successfully: ${user.name} (${user.email})`);
+    // Verify password if account has a password set
+    if (userWithPassword.password) {
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          code: "PASSWORD_REQUIRED",
+          message: "Password is required for this account.",
+        });
+      }
 
-    // Cryptographically random session token
-    const sessionToken = `astro_session_${crypto.randomBytes(32).toString("hex")}`;
-    activeSessions.add(sessionToken);
+      let isMatch = false;
+      const isBcrypt = userWithPassword.password.startsWith("$2a$") || userWithPassword.password.startsWith("$2b$");
+
+      if (isBcrypt) {
+        isMatch = await comparePassword(password, userWithPassword.password);
+      } else {
+        // Transparent upgrade: legacy plaintext password matched, convert to bcrypt hash
+        if (userWithPassword.password === password) {
+          isMatch = true;
+          const upgradedHash = await hashPassword(password);
+          await UserModel.updatePassword(userWithPassword.userId, upgradedHash);
+          console.log(`🔐 [Security Upgrade] Transparently upgraded legacy password for: ${cleanEmail}`);
+        }
+      }
+
+      if (!isMatch) {
+        console.warn(`⚠️ [Security Alert] Failed login attempt for: ${cleanEmail} from IP: ${req.ip}`);
+        return res.status(401).json({
+          success: false,
+          code: "INVALID_CREDENTIALS",
+          message: "Incorrect password. Please try again.",
+        });
+      }
+    }
+
+    const safeUser = sanitizeUser(userWithPassword);
+    // Generate signed JWT token with exactly 3600 seconds (1 hour) expiration
+    const token = generateUserToken(safeUser);
+
+    console.log(`🌿 [Auth] User logged in: ${safeUser.name} (${safeUser.email})`);
 
     res.json({
       success: true,
       message: "Login successful!",
-      user,
-      token: sessionToken,
+      user: safeUser,
+      token,
+      expiresIn: JWT_EXPIRY_SECONDS, // 3600 seconds
+      tokenType: "Bearer",
     });
   } catch (err) {
     console.error("⚠️ [Auth] Login error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Internal server error during login" });
   }
 };
 
+/**
+ * POST Signup / Register User
+ */
 export const signupUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ success: false, message: "Valid email is required" });
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      return res.status(400).json({ success: false, message: "A valid email address is required" });
+    }
+
+    if (password && password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long.",
+      });
     }
 
     const cleanEmail = email.trim().toLowerCase();
@@ -81,68 +137,103 @@ export const signupUser = async (req, res) => {
       });
     }
 
-    console.log(`🍃 [Auth] Creating new registered user: ${cleanName} (${cleanEmail})`);
+    console.log(`🌿 [Auth] Registering user: ${cleanName} (${cleanEmail})`);
+
+    // Strictly enforce role: "user" (Mass-Assignment Protection)
     const newUser = await UserModel.create({
       name: cleanName,
       email: cleanEmail,
       password: password || "",
-      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80",
+      role: "user",
     });
 
-    const sessionToken = `astro_session_${crypto.randomBytes(32).toString("hex")}`;
-    activeSessions.add(sessionToken);
+    const safeUser = sanitizeUser(newUser);
+    const token = generateUserToken(safeUser);
 
     res.status(201).json({
       success: true,
       message: "Account created successfully!",
-      user: newUser,
-      token: sessionToken,
+      user: safeUser,
+      token,
+      expiresIn: JWT_EXPIRY_SECONDS,
+      tokenType: "Bearer",
     });
   } catch (err) {
     console.error("⚠️ [Auth] Signup error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Internal server error during registration" });
   }
 };
 
+/**
+ * POST Logout User (Server-Side JWT Invalidation)
+ */
 export const logoutUser = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
-      activeSessions.delete(token);
+      revokeToken(token);
     }
-    res.json({ success: true, message: "Session successfully invalidated and logged out." });
+    res.json({
+      success: true,
+      message: "Session successfully invalidated and logged out.",
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
+/**
+ * GET Verify Active Session
+ */
 export const verifySession = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ success: false, message: "No active session token provided." });
+    // req.user is already validated and decoded by requireAuth middleware
+    const user = await UserModel.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
-    const token = authHeader.split(" ")[1];
-    if (!activeSessions.has(token)) {
-      return res.status(401).json({ success: false, message: "Session expired or invalid." });
-    }
-    res.json({ success: true, message: "Session is active and valid." });
+    res.json({
+      success: true,
+      message: "Session is active and valid.",
+      user: sanitizeUser(user),
+      tokenUser: req.user,
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
+/**
+ * PUT Update User Profile Name (Protected against IDOR)
+ */
 export const updateUserName = async (req, res) => {
   try {
     const { userId, name } = req.body;
-    const user = await UserModel.updateName(userId, name);
-    res.json({ success: true, name: user?.name || name });
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Valid name is required" });
+    }
+
+    // IDOR Enforcement: User can only rename their own account unless admin
+    const targetUserId = userId || req.user.userId;
+    if (req.user.role !== "admin" && req.user.userId !== targetUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You cannot modify another user's profile.",
+      });
+    }
+
+    const updated = await UserModel.updateName(targetUserId, name.trim());
+    res.json({ success: true, name: updated?.name || name.trim() });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
+/**
+ * POST Add Bonus Balance (Admin Only)
+ */
 export const addBonusBalance = async (req, res) => {
   try {
     const { id } = req.params;
@@ -155,6 +246,9 @@ export const addBonusBalance = async (req, res) => {
   }
 };
 
+/**
+ * PUT Toggle Ban User (Admin Only)
+ */
 export const toggleBanUser = async (req, res) => {
   try {
     const { id } = req.params;

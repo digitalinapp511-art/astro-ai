@@ -5,15 +5,16 @@ import {
   toggleBannerStatus,
   deleteBanner,
 } from "../controllers/bannerController.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Public read route
+// Public: View active homepage banners
 router.get("/", getBanners);
 
-// Admin modification routes
-router.post("/", createBanner);
-router.patch("/:id/status", toggleBannerStatus);
-router.delete("/:id", deleteBanner);
+// Admin Only: Add, toggle, and delete banners
+router.post("/", requireAdmin, createBanner);
+router.patch("/:id/status", requireAdmin, toggleBannerStatus);
+router.delete("/:id", requireAdmin, deleteBanner);
 
 export default router;

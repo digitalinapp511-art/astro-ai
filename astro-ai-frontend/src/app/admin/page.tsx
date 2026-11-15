@@ -263,10 +263,21 @@ export default function AdminDashboard() {
   // Sync with Live Node.js Backend & Local Storage Fallback
   useEffect(() => {
     try {
-      // Check session unlock
-      const unlockedSession = sessionStorage.getItem("astroai_admin_unlocked");
-      if (unlockedSession === "true") {
+      // Check session unlock with real verified Admin JWT Token
+      const adminToken = sessionStorage.getItem("astroai_admin_token");
+      if (adminToken) {
+        // Optimistically show unlocked and verify with live backend
         setIsUnlocked(true);
+        adminApi.getAnalytics().then((metrics) => {
+          if (!metrics) {
+            // Token expired or invalid, re-lock panel
+            setIsUnlocked(false);
+            sessionStorage.removeItem("astroai_admin_token");
+            sessionStorage.removeItem("astroai_admin_unlocked");
+          }
+        }).catch(() => {});
+      } else {
+        setIsUnlocked(false);
       }
 
       // Check saved master PIN
@@ -540,35 +551,33 @@ export default function AdminDashboard() {
     const entered = pinInput.trim();
 
     try {
-      // 1. Verify with live backend & MongoDB Atlas
+      // Strictly authenticate with live backend using cryptographically verified PIN & Admin JWT
       const res = await adminApi.login(entered);
-      if (res && res.success) {
+      if (res && res.success && res.token) {
         setIsUnlocked(true);
         sessionStorage.setItem("astroai_admin_unlocked", "true");
+        sessionStorage.setItem("astroai_admin_token", res.token);
         setMasterPin(entered);
         setPinError(false);
         setPinInput("");
         showToast("Master Admin Access Granted! 🔓");
         return;
       }
-    } catch {}
-
-    // 2. Offline fallback
-    if (entered === masterPin || entered === "7261") {
-      setIsUnlocked(true);
-      sessionStorage.setItem("astroai_admin_unlocked", "true");
-      setPinError(false);
-      setPinInput("");
-      showToast("Master Admin Access Granted! 🔓");
-    } else {
-      setPinError(true);
-      setPinInput("");
+    } catch (err) {
+      console.warn("Admin unlock error:", err);
     }
+
+    // Invalid PIN or failed auth: Reject access (Zero offline bypass)
+    setPinError(true);
+    setPinInput("");
+    showToast("Invalid Security PIN! Access Denied.");
   };
 
   const handleLockAdmin = () => {
     setIsUnlocked(false);
+    adminApi.logout();
     sessionStorage.removeItem("astroai_admin_unlocked");
+    sessionStorage.removeItem("astroai_admin_token");
     showToast("Admin Panel Safely Locked! 🔒");
   };
 

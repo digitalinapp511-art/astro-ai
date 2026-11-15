@@ -9,19 +9,24 @@ import {
   updateAppointmentStatus,
   deleteAppointment,
 } from "../controllers/poojaController.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Pooja Catalog
+// Public: View available Poojas catalog
 router.get("/", getAllPoojas);
-router.post("/", createPooja);
-router.put("/:id", updatePooja);
-router.delete("/:id", deletePooja);
 
-// Appointments & Bookings
+// Public: Book a Pooja appointment
 router.post("/book", bookAppointment);
-router.get("/appointments", getAllAppointments);
-router.patch("/appointments/:id/status", updateAppointmentStatus);
-router.delete("/appointments/:id", deleteAppointment);
+
+// Admin Only: Pooja Catalog Management
+router.post("/", requireAdmin, createPooja);
+router.put("/:id", requireAdmin, updatePooja);
+router.delete("/:id", requireAdmin, deletePooja);
+
+// Admin Only: Appointment Management & PII Access
+router.get("/appointments", requireAdmin, getAllAppointments);
+router.patch("/appointments/:id/status", requireAdmin, updateAppointmentStatus);
+router.delete("/appointments/:id", requireAdmin, deleteAppointment);
 
 export default router;

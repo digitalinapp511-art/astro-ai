@@ -1,7 +1,9 @@
-// Master Admin Controller & Persistent MongoDB Atlas Security Configuration
+// Master Admin Controller & Persistent MongoDB Atlas Security Configuration (Hardened)
 import mongoose from "mongoose";
+import crypto from "crypto";
 import { AstrologerModel } from "../models/Astrologer.js";
 import { ReelModel } from "../models/Reel.js";
+import { generateAdminToken, JWT_EXPIRY_SECONDS } from "../config/security.js";
 
 let currentPin = process.env.ADMIN_MASTER_PIN || "7261";
 
@@ -15,7 +17,7 @@ export const getActiveMasterPin = async () => {
         currentPin = doc.value;
         return doc.value;
       } else {
-        // Initialize 7261 in Atlas if not exists
+        // Initialize PIN in Atlas if not exists
         await settingsCol.updateOne(
           { key: "admin_pin" },
           { $set: { key: "admin_pin", value: currentPin, updatedAt: new Date() } },
@@ -40,7 +42,7 @@ export const setActiveMasterPin = async (newPin) => {
         { $set: { key: "admin_pin", value: newPin, updatedAt: new Date() } },
         { upsert: true }
       );
-      console.log(`🔒 [Security] Admin PIN permanently updated in MongoDB Atlas to: ${newPin}`);
+      console.log(`🔐 [Security] Admin PIN permanently updated in MongoDB Atlas`);
     }
   } catch (e) {
     console.warn("⚠️ [Security] Could not persist PIN to Atlas:", e.message);
@@ -63,7 +65,7 @@ let aiPersonasStore = [
     name: "Dr. Ananya AI",
     role: "Love & Marriage Compatibility Guru",
     category: "Love",
-    avatar: "🧝‍♀️",
+    avatar: "🧕",
     tone: "Empathetic, Relationship Counseling",
     isActive: true,
     queriesAnswered: 3410,
@@ -90,26 +92,56 @@ let aiPersonasStore = [
   },
 ];
 
+/**
+ * POST Admin Login
+ * Verifies Master PIN using constant-time string comparison to prevent timing attacks
+ * Returns a cryptographically signed Admin JWT token valid for exactly 1 hour
+ */
 export const adminLogin = async (req, res) => {
-  const { pin } = req.body;
-  const activePin = await getActiveMasterPin();
+  try {
+    const { pin } = req.body;
+    if (!pin || typeof pin !== "string") {
+      return res.status(400).json({ success: false, message: "Security PIN is required." });
+    }
 
-  if (pin === activePin) {
+    const activePin = await getActiveMasterPin();
+
+    // Constant-time buffer comparison to prevent timing-attack vulnerability
+    const pinBuffer = Buffer.from(pin.trim());
+    const activeBuffer = Buffer.from(activePin.trim());
+
+    const isMatch =
+      pinBuffer.length === activeBuffer.length &&
+      crypto.timingSafeEqual(pinBuffer, activeBuffer);
+
+    if (!isMatch) {
+      console.warn(`🚨 [Security Alert] Failed Admin PIN attempt from IP: ${req.ip}`);
+      return res.status(401).json({ success: false, message: "Invalid Security PIN!" });
+    }
+
+    // Generate real signed Admin JWT (valid for 3600 seconds)
+    const adminToken = generateAdminToken("master_admin");
+    console.log(`🛡️ [Security] Admin authenticated successfully from IP: ${req.ip}`);
+
     return res.json({
       success: true,
-      token: "master_admin_jwt_token_9918",
+      token: adminToken,
+      expiresIn: JWT_EXPIRY_SECONDS, // 3600 seconds
+      tokenType: "Bearer",
       message: "Admin unlocked successfully!",
     });
+  } catch (err) {
+    console.error("⚠️ [Admin Login Error]:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
-  res.status(401).json({ success: false, message: "Invalid Security PIN!" });
 };
 
 export const changeAdminPin = async (req, res) => {
   try {
-    const { currentPin, newPin } = req.body;
+    const { currentPin: enteredCurrentPin, newPin } = req.body;
     const activePin = await getActiveMasterPin();
 
-    if (currentPin !== activePin) {
+    if (!enteredCurrentPin || enteredCurrentPin.trim() !== activePin.trim()) {
       return res.status(400).json({ success: false, message: "Current Security PIN galat hai!" });
     }
 
@@ -122,7 +154,6 @@ export const changeAdminPin = async (req, res) => {
     res.json({
       success: true,
       message: "Security PIN MongoDB Atlas me permanently update ho gaya!",
-      newPin: newPin.trim(),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -173,7 +204,7 @@ export const broadcastNotification = (req, res) => {
   const { title, body } = req.body;
   res.json({
     success: true,
-    message: "Notification broadcasted successfully to all active device tokens!",
+    message: "Notification broadcasted successfully to active device tokens!",
     broadcast: { title, body, sentAt: new Date().toISOString() },
   });
 };

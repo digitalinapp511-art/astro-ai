@@ -1,0 +1,58 @@
+[
+  {
+    "bannerId": "banner-kalachakra",
+    "title": "Daily Planetary Alignment",
+    "subtitle": "Real-time planetary transits and Vedic blessings tailored to your Janam Kundli.",
+    "badge": "DAILY PLANETARY ALIGNMENT",
+    "imageUrl": "",
+    "type": "kalachakra_chakra",
+    "bgGradient": "from-[#FFF9F2] via-[#FFEEDC] to-[#FFDFC8]",
+    "ctaText": "Explore Upay",
+    "ctaLink": "/ai-chat",
+    "order": 1,
+    "isActive": true,
+    "isSystemDefault": true
+  },
+  {
+    "bannerId": "banner-dhan-lakshmi",
+    "title": "Auspicious Dhan & Lakshmi Yog",
+    "subtitle": "Unlock financial abundance and business success with ancient Vedic wealth remedies.",
+    "badge": "🪙 SHREE DHAN & LAKSHMI YOG",
+    "imageUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+    "type": "animated_card",
+    "bgGradient": "from-[#FEF3C7] via-[#FDE68A] to-[#F59E0B]",
+    "ctaText": "Check Dhan Yog",
+    "ctaLink": "/ai-chat",
+    "order": 2,
+    "isActive": true,
+    "isSystemDefault": true
+  },
+  {
+    "bannerId": "banner-graha-shanti",
+    "title": "Navagraha Dosh & Shani Shanti",
+    "subtitle": "Get instant Vedic solutions for Shani Sade Sati, Rahu-Ketu, and Manglik Dosha.",
+    "badge": "🪐 GRAHA DOSH NIVARAN",
+    "imageUrl": "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=800&q=80",
+    "type": "animated_card",
+    "bgGradient": "from-[#E0F2FE] via-[#BAE6FD] to-[#38BDF8]",
+    "ctaText": "Talk to Astrologer",
+    "ctaLink": "/chat",
+    "order": 3,
+    "isActive": true,
+    "isSystemDefault": true
+  },
+  {
+    "bannerId": "banner-kundli-milan",
+    "title": "36 Gunas Kundli Milan & Vivah Yog",
+    "subtitle": "Check deep marriage compatibility, love harmony, and auspicious wedding dates.",
+    "badge": "❤️ VIVAH & PREM SAMBANDH",
+    "imageUrl": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80",
+    "type": "animated_card",
+    "bgGradient": "from-[#FCE7F3] via-[#FBCFE8] to-[#F43F5E]",
+    "ctaText": "Match Kundli",
+    "ctaLink": "/kundli-milan",
+    "order": 4,
+    "isActive": true,
+    "isSystemDefault": true
+  }
+]
