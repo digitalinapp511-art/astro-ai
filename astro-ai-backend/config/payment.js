@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const paymentConfig = {
-  razorpayKeyId: process.env.RAZORPAY_KEY_ID,
-  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA",
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || "HZlN4CzZP53mvX5f8TzJPrLN",
   defaultTrialFee: 4, // ₹4 Initial Mandate Setup Fee
   defaultTrialDays: 3, // 3-Day Free Trial
   defaultMonthlyDebit: 299, // ₹299 Monthly Auto-Debit
