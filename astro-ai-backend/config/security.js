@@ -3,17 +3,23 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import { logSecurityEvent } from "./securityLogger.js";
 
 dotenv.config();
 
-// Ensure strong JWT secret exists; fallback to persistent crypto-random secret
-const JWT_SECRET = process.env.JWT_SECRET || "astro_ai_super_secret_jwt_key_2026_production_grade";
+// Ensure strong JWT secret from environment; fallback to ephemeral crypto-random 64-byte key
+let activeJwtSecret = process.env.JWT_SECRET;
+if (!activeJwtSecret || activeJwtSecret.trim().length < 16) {
+  console.warn("⚠️ [SECURITY WARNING] JWT_SECRET missing or too weak in environment variables!");
+  console.warn("🛡️ Generating cryptographically secure ephemeral 64-byte secret for this runtime.");
+  activeJwtSecret = crypto.randomBytes(64).toString("hex");
+}
+
 const JWT_ISSUER = "astro-ai-backend";
 const JWT_AUDIENCE = "astro-ai-app";
-export const JWT_EXPIRY_SECONDS = 3600; // Exactly 1 hour = 3600 seconds as required
+export const JWT_EXPIRY_SECONDS = 3600; // Exactly 1 hour = 3600 seconds (MANDATORY)
 
-// Server-side token revocation blacklist (in-memory with timestamps for cleanup)
-// In clustered or distributed setups, this can be backed by Redis or MongoDB TTL collection
+// Server-side token revocation blacklist
 const revokedTokens = new Map();
 
 // Periodic cleanup of expired revoked tokens (runs every 15 minutes)
@@ -27,7 +33,7 @@ setInterval(() => {
 }, 15 * 60 * 1000);
 
 export const securityConfig = {
-  jwtSecret: JWT_SECRET,
+  jwtSecret: activeJwtSecret,
   issuer: JWT_ISSUER,
   audience: JWT_AUDIENCE,
   expiresIn: JWT_EXPIRY_SECONDS,
@@ -66,7 +72,7 @@ export const generateUserToken = (user) => {
 
   return jwt.sign(payload, securityConfig.jwtSecret, {
     algorithm: "HS256",
-    expiresIn: securityConfig.expiresIn, // 3600 seconds
+    expiresIn: securityConfig.expiresIn, // exactly 3600 seconds
     issuer: securityConfig.issuer,
     audience: securityConfig.audience,
   });
@@ -85,7 +91,7 @@ export const generateAdminToken = (adminIdentifier = "master_admin") => {
 
   return jwt.sign(payload, securityConfig.jwtSecret, {
     algorithm: "HS256",
-    expiresIn: securityConfig.expiresIn, // 3600 seconds
+    expiresIn: securityConfig.expiresIn, // exactly 3600 seconds
     issuer: securityConfig.issuer,
     audience: securityConfig.audience,
   });
@@ -94,7 +100,7 @@ export const generateAdminToken = (adminIdentifier = "master_admin") => {
 /**
  * Explicitly verify a JWT token:
  * - Checks algorithm: HS256 only
- * - Checks expiration: fails if expired
+ * - Checks expiration: fails if expired (> 3600 seconds)
  * - Checks issuer & audience
  * - Checks revocation blacklist
  */
@@ -125,9 +131,12 @@ export const revokeToken = (token) => {
   if (!token) return;
   try {
     const decoded = jwt.decode(token);
-    // Keep in blacklist until its natural expiration
     const expiryTime = decoded?.exp ? decoded.exp * 1000 : Date.now() + JWT_EXPIRY_SECONDS * 1000;
     revokedTokens.set(token, expiryTime);
+    logSecurityEvent("TOKEN_REVOKED", {
+      userId: decoded?.userId,
+      role: decoded?.role,
+    });
   } catch (e) {
     revokedTokens.set(token, Date.now() + JWT_EXPIRY_SECONDS * 1000);
   }

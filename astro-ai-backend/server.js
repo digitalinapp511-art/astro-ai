@@ -4,10 +4,12 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
+import crypto from "crypto";
 import { connectDB } from "./config/db.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requireAdmin } from "./middleware/auth.js";
 import { apiLimiter } from "./middleware/rateLimiter.js";
+import { logSecurityEvent } from "./config/securityLogger.js";
 
 // Models for Database Aggregate Metrics
 import { UserModel } from "./models/User.js";
@@ -34,32 +36,73 @@ const PORT = process.env.PORT || 5000;
 // Connect MongoDB Database
 connectDB();
 
-// 1. Secure HTTP Headers (Helmet)
+// 1. Production Reverse Proxy Trust (Required on Render & Vercel to extract true client IP for rate limiting)
+app.set("trust proxy", 1);
+
+// 2. Request Correlation ID Middleware (Distributed Tracing for Security Auditing)
+app.use((req, res, next) => {
+  req.id = req.headers["x-request-id"] || crypto.randomUUID();
+  res.setHeader("X-Request-Id", req.id);
+  next();
+});
+
+// 3. Secure HTTP Headers (Helmet Production Hardening)
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Managed by Next.js frontend
+    contentSecurityPolicy: false, // Managed by Vercel Next.js frontend
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    frameguard: { action: "sameorigin" },
+    hsts: {
+      maxAge: 63072000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   })
 );
 
-// 2. Strict CORS Configuration (No wildcard origin for authenticated APIs)
-const allowedOrigins = [
+// 4. Strict CORS Configuration (Render Backend ➔ Vercel Frontend)
+const envOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : [];
+
+const baseAllowedOrigins = [
   "https://www.uurja.in",
   "https://uurja.in",
+  "https://astro-ai-frontend.vercel.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:5000",
   "http://127.0.0.1:5000",
+  ...envOrigins,
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, server-to-server curl, postman in dev)
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (e.g. mobile apps, server-to-server health checks)
+      if (!origin) return callback(null, true);
+
+      // Check explicit whitelist
+      if (baseAllowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error("CORS policy violation: Access from origin not allowed."));
+
+      // Check approved Vercel Preview or Render subdomains
+      if (
+        /^https:\/\/astro-ai[a-zA-Z0-9_-]*\.vercel\.app$/.test(origin) ||
+        /^https:\/\/astro-ai[a-zA-Z0-9_-]*\.onrender\.com$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      logSecurityEvent("CORS_BLOCKED_ORIGIN", {
+        blockedOrigin: origin,
+      });
+
+      return callback(new Error("CORS policy violation: Access from this origin is forbidden."));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -68,41 +111,42 @@ app.use(
       "Authorization",
       "x-admin-pin",
       "X-Requested-With",
+      "X-Request-Id",
       "Accept",
     ],
   })
 );
 
-// 3. Request Body Size Limit (Prevent buffer overflow / Denial of Service)
+// 5. Request Body Size Limit (Prevent buffer overflow / Denial of Service)
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// 4. NoSQL Query Injection Protection (Strip $ and . prefixes)
+// 6. NoSQL Query Injection Protection (Strip $ and . prefixes from body/query)
 app.use(mongoSanitize());
 
-// 5. Global API Rate Limiter
+// 7. Global API Rate Limiter
 app.use("/api/v1", apiLimiter);
 
-// 6. Sanitized Request Logger (Never logs passwords, tokens, or PII)
+// 8. Sanitized Request Logger (Never logs passwords, tokens, or PII)
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
     console.log(
-      `📡 [API] ${req.method} ${req.originalUrl} ➔ ${res.statusCode} (${duration}ms) [IP: ${req.ip || "unknown"}]`
+      `📡 [API] ${req.method} ${req.originalUrl} ➔ ${res.statusCode} (${duration}ms) [IP: ${req.ip || "unknown"}] [ReqID: ${req.id}]`
     );
   });
   next();
 });
 
-// Base Public Health Check (Safe: No internal hosts or credentials disclosed)
+// Base Public Health Check (Render Health Probe)
 app.get("/", (req, res) => {
   const isMongoConnected = mongoose.connection.readyState === 1;
   res.json({
-    status: "success",
-    service: "AstroAI Production Backend",
-    database: isMongoConnected ? "Connected" : "Fallback Store Active",
-    version: "2.1.0",
+    status: "healthy",
+    service: "AstroAI Render Production Backend",
+    database: isMongoConnected ? "Connected (MongoDB Atlas)" : "Local Fallback Store",
+    version: "2.2.0",
     timestamp: new Date().toISOString(),
   });
 });
@@ -119,7 +163,7 @@ app.get("/api/v1/database/status", requireAdmin, async (req, res) => {
       ReelModel.find().catch(() => []),
     ]);
 
-    // Aggregate statistics ONLY - Zero PII or credentials exposed
+    // Aggregate statistics ONLY - Zero PII or database hostnames exposed
     res.json({
       success: true,
       connectionStatus: isMongoConnected ? "Live Connected" : "Local Storage Active",
@@ -153,7 +197,7 @@ app.use("/api/v1/poojas", poojaRoutes);
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 AstroAI Hardened Security Backend running on: http://localhost:${PORT}`);
+  console.log(`🚀 AstroAI Hardened Backend active on Port: ${PORT}`);
   console.log(`🔒 Cryptographic JWT (1-Hour Expiration) & RBAC Active`);
   console.log(`🛡️ Rate Limiting, Helmet Security Headers, and NoSQL Sanitization Enabled`);
 });

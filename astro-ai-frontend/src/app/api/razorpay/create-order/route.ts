@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "HZlN4CzZP53mvX5f8TzJPrLN";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 export async function POST(req: Request) {
   try {
+    if (!RAZORPAY_KEY_SECRET) {
+      console.error("[Razorpay Error] RAZORPAY_KEY_SECRET is not configured in environment variables.");
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Payment gateway credentials are not configured on the server.",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const amount = Number(body.amount || 4); // in INR
     const amountInPaise = Math.round(amount * 100);

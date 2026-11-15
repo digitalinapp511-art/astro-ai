@@ -4,10 +4,11 @@ import crypto from "crypto";
 import { AstrologerModel } from "../models/Astrologer.js";
 import { ReelModel } from "../models/Reel.js";
 import { generateAdminToken, JWT_EXPIRY_SECONDS } from "../config/security.js";
+import { logSecurityEvent } from "../config/securityLogger.js";
 
-let currentPin = process.env.ADMIN_MASTER_PIN || "7261";
+let currentPin = process.env.ADMIN_MASTER_PIN || "";
 
-// Retrieve current Master PIN from MongoDB Atlas or fallback
+// Retrieve current Master PIN from MongoDB Atlas or environment
 export const getActiveMasterPin = async () => {
   try {
     if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
@@ -16,19 +17,20 @@ export const getActiveMasterPin = async () => {
       if (doc && doc.value) {
         currentPin = doc.value;
         return doc.value;
-      } else {
-        // Initialize PIN in Atlas if not exists
+      } else if (process.env.ADMIN_MASTER_PIN) {
+        // Initialize from environment into Atlas if not present
         await settingsCol.updateOne(
           { key: "admin_pin" },
-          { $set: { key: "admin_pin", value: currentPin, updatedAt: new Date() } },
+          { $set: { key: "admin_pin", value: process.env.ADMIN_MASTER_PIN, updatedAt: new Date() } },
           { upsert: true }
         );
+        currentPin = process.env.ADMIN_MASTER_PIN;
       }
     }
   } catch (e) {
-    console.warn("⚠️ [Security] Atlas read fallback:", e.message);
+    console.warn("⚠️ [Security] Atlas PIN read notice:", e.message);
   }
-  return currentPin;
+  return currentPin || process.env.ADMIN_MASTER_PIN || "";
 };
 
 // Set and Persist New Master PIN in MongoDB Atlas
@@ -115,13 +117,19 @@ export const adminLogin = async (req, res) => {
       crypto.timingSafeEqual(pinBuffer, activeBuffer);
 
     if (!isMatch) {
-      console.warn(`🚨 [Security Alert] Failed Admin PIN attempt from IP: ${req.ip}`);
+      logSecurityEvent("ADMIN_PIN_FAILED", {
+        ip: req.ip,
+        requestId: req.id,
+      });
       return res.status(401).json({ success: false, message: "Invalid Security PIN!" });
     }
 
     // Generate real signed Admin JWT (valid for 3600 seconds)
     const adminToken = generateAdminToken("master_admin");
-    console.log(`🛡️ [Security] Admin authenticated successfully from IP: ${req.ip}`);
+    logSecurityEvent("ADMIN_LOGIN_SUCCESS", {
+      ip: req.ip,
+      requestId: req.id,
+    });
 
     return res.json({
       success: true,
@@ -142,6 +150,10 @@ export const changeAdminPin = async (req, res) => {
     const activePin = await getActiveMasterPin();
 
     if (!enteredCurrentPin || enteredCurrentPin.trim() !== activePin.trim()) {
+      logSecurityEvent("ADMIN_PIN_CHANGE_REJECTED", {
+        ip: req.ip,
+        requestId: req.id,
+      });
       return res.status(400).json({ success: false, message: "Current Security PIN galat hai!" });
     }
 
@@ -150,6 +162,10 @@ export const changeAdminPin = async (req, res) => {
     }
 
     await setActiveMasterPin(newPin.trim());
+    logSecurityEvent("ADMIN_PIN_CHANGED", {
+      ip: req.ip,
+      requestId: req.id,
+    });
 
     res.json({
       success: true,

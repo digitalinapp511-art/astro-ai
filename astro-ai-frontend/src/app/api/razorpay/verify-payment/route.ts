@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_U00YoG5jiFz2gA";
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "HZlN4CzZP53mvX5f8TzJPrLN";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 export async function POST(req: Request) {
   try {
+    if (!RAZORPAY_KEY_SECRET) {
+      console.error("[Razorpay Error] RAZORPAY_KEY_SECRET is not configured in environment variables.");
+      return NextResponse.json(
+        { success: false, message: "Payment verification credentials missing on server." },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const {
       razorpay_order_id,
@@ -54,9 +62,10 @@ export async function POST(req: Request) {
       console.log("[Razorpay] Payment verified via API:", paymentData.status);
     }
 
-    // 2. Sync with Hostinger backend database if reachable
+    // 2. Sync with Render/Hostinger backend database if reachable
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://astro-ai-x5c6.onrender.com/api/v1";
     try {
-      await fetch("https://astro.uurja.in/api/v1/subscriptions/verify-mandate", {
+      await fetch(`${backendUrl}/subscriptions/verify-mandate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,7 +78,7 @@ export async function POST(req: Request) {
         }),
       });
     } catch (e) {
-      console.warn("Hostinger sync notice:", e);
+      console.warn("Backend sync notice (ignored):", e);
     }
 
     return NextResponse.json({

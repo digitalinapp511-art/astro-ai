@@ -1,6 +1,7 @@
 // Central Authentication & Role-Based Access Control (RBAC) Middleware
 import { verifyJwtToken } from "../config/security.js";
 import { UserModel } from "../models/User.js";
+import { logSecurityEvent } from "../config/securityLogger.js";
 
 /**
  * Require valid JWT authentication (User or Admin)
@@ -22,6 +23,11 @@ export const requireAuth = async (req, res, next) => {
       decoded = verifyJwtToken(token);
     } catch (tokenErr) {
       if (tokenErr.name === "TokenExpiredError") {
+        logSecurityEvent("JWT_TOKEN_EXPIRED", {
+          ip: req.ip,
+          path: req.originalUrl,
+          requestId: req.id,
+        });
         return res.status(401).json({
           success: false,
           code: "TOKEN_EXPIRED",
@@ -29,12 +35,25 @@ export const requireAuth = async (req, res, next) => {
         });
       }
       if (tokenErr.name === "TokenRevokedError") {
+        logSecurityEvent("JWT_TOKEN_REVOKED", {
+          ip: req.ip,
+          path: req.originalUrl,
+          requestId: req.id,
+        });
         return res.status(401).json({
           success: false,
           code: "TOKEN_REVOKED",
           message: "Session token was logged out and is no longer valid.",
         });
       }
+
+      logSecurityEvent("JWT_VALIDATION_FAILURE", {
+        reason: tokenErr.message,
+        ip: req.ip,
+        path: req.originalUrl,
+        requestId: req.id,
+      });
+
       return res.status(401).json({
         success: false,
         code: "INVALID_TOKEN",
@@ -46,6 +65,11 @@ export const requireAuth = async (req, res, next) => {
     if (decoded.userId && decoded.role !== "admin") {
       const user = await UserModel.findById(decoded.userId);
       if (user && user.isBanned) {
+        logSecurityEvent("BANNED_USER_ACCESS_ATTEMPT", {
+          userId: decoded.userId,
+          ip: req.ip,
+          requestId: req.id,
+        });
         return res.status(403).json({
           success: false,
           code: "ACCOUNT_BANNED",
@@ -74,6 +98,15 @@ export const requireAdmin = (req, res, next) => {
     if (req.user && req.user.role === "admin") {
       return next();
     }
+
+    logSecurityEvent("UNAUTHORIZED_ADMIN_ACCESS_ATTEMPT", {
+      userId: req.user?.userId,
+      role: req.user?.role || "unauthenticated",
+      targetPath: req.originalUrl,
+      ip: req.ip,
+      requestId: req.id,
+    });
+
     return res.status(403).json({
       success: false,
       code: "FORBIDDEN",
