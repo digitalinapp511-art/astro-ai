@@ -1,9 +1,6 @@
 /**
  * AstroAI — AI Astrologer Service Layer
- * 
- * NOTE FOR BACKEND INTEGRATION:
- * When your friend's backend is ready, simply change `USE_REAL_BACKEND` to `true`
- * and update `BACKEND_API_URL` to your friend's API endpoint (e.g., http://localhost:5000/api/ai-chat).
+ * Connects directly to high-speed Vercel serverless AI route and Render backend fallback.
  */
 
 export interface ChatMessage {
@@ -27,170 +24,188 @@ export interface UserAstrologicalContext {
   title?: string;
 }
 
-// CONNECTED TO LIVE NODE.JS BACKEND
 export const USE_REAL_BACKEND = true;
-export const getBackendApiUrl = () => {
-  if (typeof window !== "undefined") {
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-      return (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1") + "/ai/chat";
-    }
+
+/**
+ * Intelligent In-house Vedic Astrologer Engine (Warm, Empathetic Human Guidance)
+ */
+export function simulateVedicAstrologerEngine(
+  userQuery: string,
+  context?: UserAstrologicalContext
+): { text: string; remedy?: string; mantra?: string } {
+  const q = userQuery.toLowerCase().trim();
+  const userName = context?.name || "Seeker";
+  const astroName = context?.astrologerName || "Maa Gayatri Devi";
+  const isMaa = astroName.toLowerCase().includes("gayatri") || astroName.toLowerCase().includes("maa");
+  const isAcharya = astroName.toLowerCase().includes("vidyadhar") || astroName.toLowerCase().includes("acharya");
+  const isAnanya = astroName.toLowerCase().includes("ananya");
+
+  const address = isMaa ? "Beta" : (userName !== "Seeker" ? userName : "Bhakta");
+  const blessing = isMaa ? "Kalyan ho beta, sada khush raho! Maa Gayatri ka aashirwad hamesha tumhare sath hai." 
+    : isAcharya ? `Pranam ${userName}! Bhagwan Ganesh aur Devguru Brihaspati ka aashirwad aap par bana rahe.`
+    : isAnanya ? `Namaste ${userName}! Prem aur vishwas hi jeevan ki sabse badi shakti hai.`
+    : `Hari Om ${userName}! Surya Dev ki kripa se aapka jeevan tejomay ho.`;
+
+  // 1. Greetings (Ram Ram, Pranam, Namaste, Jai Mata Di, etc.)
+  if (
+    q.includes("ram ram") || q.includes("pranam") || q.includes("namaste") ||
+    q.includes("jai mata di") || q.includes("radhe radhe") || q.includes("hari om") ||
+    q.includes("jai shree ram") || q.includes("har har mahadev") || q.includes("hello") ||
+    q.includes("hi") || q === "mata ji" || q === "pandit ji" || q === "guruji"
+  ) {
+    return {
+      text: `${blessing} \n\nKahiye ${address}, aaj aapke man me kya prashna ya chinta hai? Chahe shaadi, career, dhan, parivar ya kisi grah dosha se judi baat ho—aap bina kisi sankoch ke mujhse khul kar pooch sakte hain.`,
+      remedy: "",
+      mantra: "",
+    };
   }
-  return "https://astro-ai-x5c6.onrender.com/api/v1/ai/chat";
-};
-export const BACKEND_API_URL = getBackendApiUrl();
+
+  // 2. Love & Marriage (Vivah Yog)
+  if (
+    q.includes("shaadi") || q.includes("marriage") || q.includes("vivah") ||
+    q.includes("love") || q.includes("pyaar") || q.includes("rishta") ||
+    q.includes("breakup") || q.includes("patni") || q.includes("pati") || q.includes("partner")
+  ) {
+    return {
+      text: `${address}, vivah aur rishton ke maamle me chinta mat kijiye. Janam Kundli ke Saptam Bhaav (7th House) par Brihaspati aur Shukra ke transit ke kaaran thoda vilamb ya man-mutaav dikh raha hai, parantu aane wale 3 se 6 mahino me anukool yog prabal ho rahe hain. Dhyan rakhein ki baat-cheet me krodh aur jaldbaazi se bachein.`,
+      remedy: "Guruwaar (Thursday) ke din peele vastra dharan karein, Vishnu Sahasranama ka paath karein aur kesar ka tilak lagayein.",
+      mantra: "ॐ नमो भगवते वासुदेवाय नमः • ॐ क्लीं कृष्णाय नमः"
+    };
+  }
+
+  // 3. Career, Job & Promotion
+  if (
+    q.includes("job") || q.includes("career") || q.includes("naukri") ||
+    q.includes("promotion") || q.includes("business") || q.includes("vyapar") ||
+    q.includes("boss") || q.includes("work") || q.includes("interview")
+  ) {
+    return {
+      text: `${address}, karyakshetra me mehnat ka fal thoda ruk kar milne se pareshan na hon. Dasham Bhaav (10th House) me Surya aur Budh ke yog se aane wale samay me sthirta aayegi. Karobaar aur naukri me naye avsar khulenge, bas apne niyam aur imaandari par dridh rahein.`,
+      remedy: "Pratidin suryoday ke samay taambe ke lote se Surya Dev ko arghya dein aur laal chandan ka prayog karein.",
+      mantra: "ॐ घृणिः सूर्याय नमः"
+    };
+  }
+
+  // 4. Wealth, Money & Finance
+  if (
+    q.includes("dhan") || q.includes("money") || q.includes("paisa") ||
+    q.includes("karz") || q.includes("finance") || q.includes("debt") || q.includes("loss")
+  ) {
+    return {
+      text: `${address}, aarthik sthiti ko lekar ghabraane ki zaroorat nahi hai. Dwitiya (Dhan) aur Ekadash (Labh) bhaav me Kuber aur Maa Lakshmi ki kripa banne ke sanket hain. Ruka hua paisa nikalne ke yog hain, parantu kisi bhi anjaan risk ya speculation se bachein.`,
+      remedy: "Shukrawaar ke din safed mithai ya kheer ka daan kisi zarooratmand ko karein aur diya jalayein.",
+      mantra: "ॐ श्रीं ह्रीं क्लीं श्रीं सिद्ध लक्ष्म्यै नमः"
+    };
+  }
+
+  // 5. Shani, Sade Sati, Rahu-Ketu, Nazar, Fear, Dosha
+  if (
+    q.includes("shani") || q.includes("dosh") || q.includes("manglik") ||
+    q.includes("sade sati") || q.includes("problem") || q.includes("rahu") || q.includes("ketu")
+  ) {
+    return {
+      text: `${address}, Shani Dev anyay nahi karte, wo karm ke anusaar jeevan ko tarashte hain. Agar Sade Sati ya Rahu ka prabhav hai toh niyamit sadhana se sabhi kasht door ho jate hain. Kisi ka dil na dukhayein aur sewa bhaav rakhein.`,
+      remedy: "Shanivaar ki shaam ko peepal ke vriksh ke neeche sarson ke tel ka deepak jalayein aur Hanuman Chalisa ka paath karein.",
+      mantra: "ॐ शं शनैश्चराय नमः • ॐ हं हनुमते नमः"
+    };
+  }
+
+  // 6. Health, Anxiety, Tension, Sleep
+  if (
+    q.includes("health") || q.includes("sehat") || q.includes("tension") ||
+    q.includes("neend") || q.includes("depression") || q.includes("bimaari") || q.includes("dard")
+  ) {
+    return {
+      text: `${address}, sharirik aur mansik ashanti Chandrama (Moon) ke utaar-chadhaav se hoti hai. Bholenath ki upasana se Chandrama balwaan hota hai aur man me shanti aati hai. Doctor ki salah ke sath-sath adhyatmik urja ko banaye rakhein.`,
+      remedy: "Somvaar ko Shivling par kachha doodh aur jal arpit karein, aur raat ko sone se pehle thoda dhyan lagayein.",
+      mantra: "ॐ त्र्यम्बकं यजामहे सुगन्धिं पुष्टिवर्धनम् उर्वारुकमिव बन्धनान् मृत्योर्मुक्षीय मामृतात्"
+    };
+  }
+
+  // 7. General Human Vedic Blessing
+  return {
+    text: `${blessing} \n\nAapke dwara poochi gayi baat par grah-gochar ka aakalan karne par aane wala samay dhyan aur dhairya se aage badhne ka sanket de raha hai. Devguru Brihaspati ka aashirwad aapke chart par shubh fal dega. Apne lakshya par bharosa rakhein.`,
+    remedy: "Pratidin subah mata-pita ka aashirwad lein aur Gayatri Mantra ka 11 baar shant man se jaap karein.",
+    mantra: "ॐ भूर्भुवः स्वः तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि धियो यो नः प्रचोदयात्"
+  };
+}
 
 /**
  * Sends a question to the AI Astrologer.
- * Automatically switches between intelligent client-side Vedic simulation and real backend API.
+ * 1. Tries high-speed Vercel serverless route (/api/ai/chat)
+ * 2. Falls back to Render backend (https://astro-ai-x5c6.onrender.com/api/v1/ai/chat)
+ * 3. Falls back to in-house intelligent Vedic human simulation
  */
 export async function sendAIAstrologerMessage(
   userQuery: string,
-  context?: UserAstrologicalContext
+  context?: UserAstrologicalContext,
+  conversationHistory?: ChatMessage[]
 ): Promise<{ text: string; remedy?: string; mantra?: string }> {
-  const qClean = userQuery.trim().toLowerCase();
-  const userName = context?.name || "Seeker";
-
-  // Fast-path instant response for Vedic Greetings (< 200ms)
-  if (
-    qClean === "ram ram" || qClean === "ram ram ji" ||
-    qClean === "hari om" || qClean === "hari om ji" ||
-    qClean === "namaste" || qClean === "namaste ji" ||
-    qClean === "pranam" || qClean === "pranam pandit ji" ||
-    qClean.includes("radhe radhe") || qClean.includes("jai shree ram") ||
-    qClean === "hello" || qClean === "hi"
-  ) {
-    const astroGreetingName = context?.astrologerName ? `मैं हूँ ${context.astrologerName}` : "आपका AstroAI में स्वागत है";
-    return {
-      text: `राम राम! 🙏 प्रणाम ${userName}। ${astroGreetingName}। कहिए, आज ग्रह-नक्षत्र आपके जीवन के किस पहलू (विवाह, करियर, धन, या स्वास्थ्य) पर आपका मार्गदर्शन कर सकते हैं? आप बेझिझक अपना प्रश्न पूछें।`,
-      remedy: "दिन की शुरुआत सूर्य देव को तांबे के लोटे से अर्घ्य देकर और गायत्री मंत्र के जप से करें।",
-      mantra: "ॐ भूर्भुवः स्वः तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि धियो यो नः प्रचोदयात्",
-    };
-  }
-
-  // If live backend is enabled, make real HTTP POST request with 15s timeout
-  if (USE_REAL_BACKEND) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const targetUrl = getBackendApiUrl();
-
-      const response = await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          message: userQuery,
-          context: context || {},
-        }),
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        text: data.reply || data.text,
-        remedy: data.remedy,
-        mantra: data.mantra,
-      };
-    } catch (err) {
-      console.warn("Backend API timeout/error, falling back to instant Vedic engine:", err);
-      // Fallback to local high-speed Vedic engine if server is cold or slow
-    }
-  }
-
-  // Simulate realistic AI planetary thinking delay (1.4 seconds)
-  await new Promise((resolve) => setTimeout(resolve, 1400));
-
-  const query = userQuery.toLowerCase();
-
-  // 1. Marriage / Love / Relationship
-  if (
-    query.includes("shaadi") || 
-    query.includes("shadi") || 
-    query.includes("marriage") || 
-    query.includes("love") || 
-    query.includes("prem") ||
-    query.includes("vivah")
-  ) {
-    return {
-      text: `Pranam ${userName}! 🙏 Aapki kundli ke Saptam Bhaav (7th House) aur Vivah Karaka grah 'Brihaspati' (Guru) aur 'Shukra' ka vishleshan karne par pata chalta hai ki agle 8 se 14 mahine ke beech vivah ke prabal yog ban rahe hain. \n\nAgar kisi rishte me delay ya rukawat aa rahi hai, toh Shukra aur Guru ki drishti ko anukool banana hoga. Vivah me parivar ka poora sahyog milega.`,
-      remedy: "Guruwar (Thursday) ko peele vastra dharan karein, kela ke ped par jal arpit karein aur chane ki daal ka daan karein.",
-      mantra: "ॐ ग्रां ग्रीं ग्रौं सः गुरवे नमः",
-    };
-  }
-
-  // 2. Career / Job / Promotion / Business
-  if (
-    query.includes("job") || 
-    query.includes("naukri") || 
-    query.includes("career") || 
-    query.includes("promotion") || 
-    query.includes("business") || 
-    query.includes("vyapar")
-  ) {
-    return {
-      text: `Karyakshetra me aashirwad ke yog ban rahe hain ${userName}! 💼 \n\nAapke Dasham Bhaav (10th House) me Surya aur Budh ki 'Budhaditya Yog' sthiti karobaar aur nayi naukri me sthirta layegi. Aane wale 45 se 90 dinon me nayi opportunity ya promotion ke aasaar dikh rahe hain. \n\nSenior officers ya partners se baatcheet me dhairya rakhein.`,
-      remedy: "Pratidin subah taambe ke lote se Surya Dev ko arghya dein aur karyasthal par Uttar-Purva (North-East) disha me baithne ki koshish karein.",
-      mantra: "ॐ घृणिः सूर्याय नमः",
-    };
-  }
-
-  // 3. Wealth / Money / Property / Karz
-  if (
-    query.includes("money") || 
-    query.includes("paisa") || 
-    query.includes("dhan") || 
-    query.includes("wealth") || 
-    query.includes("karz") || 
-    query.includes("property")
-  ) {
-    return {
-      text: `Dhan aur Samriddhi ke sandarbh me grah-nakshatra anukool sanket de rahe hain. 🪙 \n\nAapke Dwitiya Bhaav (Dhan Bhaav) aur Ekadash Bhaav (Labh Bhaav) me Kuber Dev ki kripa se aarthik aawak me sudhaar aayega. Purana ruka hua paisa wapas milne ke yog hain. \n\nBina soche samjhe kisi bade speculative investment se bachein.`,
-      remedy: "Shukrawar ko Kanyao ko safed mithai ya kheer khilayein aur ghar ki tijori Uttar (North) disha me rakhein.",
-      mantra: "ॐ श्रीं ह्रीं क्लीं श्रीं सिद्ध लक्ष्म्यै नमः",
-    };
-  }
-
-  // 4. Shani / Sade Sati / Manglik / Dosha
-  if (
-    query.includes("shani") || 
-    query.includes("sade sati") || 
-    query.includes("dhayya") || 
-    query.includes("manglik") || 
-    query.includes("dosha") ||
-    query.includes("nadi")
-  ) {
-    return {
-      text: `Ghabrayein nahi ${userName}, har dosha ka Vedic shanti upay hota hai! 🪐 \n\nShani Dev karmfal daata hain, wo parishram ka fal dete hain. Agar Sade Sati ya Dhaiya ka prabhav hai, toh dharmi bane rahein aur kisi ka apmaan na karein. Niyamit Hanuman sadhana se Shani aur Manglik dosha ka prabhav samapt ho jata hai.`,
-      remedy: "Shanivaar ko suryast ke baad peepal ke ped ke paas sarson ke tel ka deepak jalayein aur Hanuman Chalisa ka paath karein.",
-      mantra: "ॐ शं शनैश्चराय नमः • ॐ हं हनुमते नमः",
-    };
-  }
-
-  // 5. Health / Mental Peace / Overthinking / Depression
-  if (
-    query.includes("health") || 
-    query.includes("sehat") || 
-    query.includes("tension") || 
-    query.includes("peace") || 
-    query.includes("neend") ||
-    query.includes("anxiety")
-  ) {
-    return {
-      text: `Man ki bechaini aur overthinking Chandrama (Moon) ke prabhav se hoti hai. 🌙 \n\nSomvaar ka din aapke man aur urja ke santulan ke liye shubh hai. Shiv ji ki upasana se Chandrama bali hota hai aur man ko alokik shanti milti hai. Rog-nashak grah Shani aur Guru ka prabhav sharirik urja me vriddhi karega.`,
-      remedy: "Somvaar ko shivling par kacha doodh aur jal arpit karein, aur chandi ka kada ya chhalla dharan karein.",
-      mantra: "ॐ नमः शिवाय • ॐ सों सोमाय नमः",
-    };
-  }
-
-  // 6. General / Default Astrological Query
-  return {
-    text: `Pranam ${userName}! Grah-gochar ke aadhar par aapke jeevan me naye parivartan ka daur shuru ho raha hai. ✨ \n\nJupiter (Brihaspati) ka aashirwad aapke chart par shubh fal de raha hai. Aane wale mahine me adhyatmik aur aarthik donon roop se aage badhne ke raste khulenge. Apne lakshya par dhyan kendrit rakhein.`,
-    remedy: "Pratidin Gayatri Mantra ka 11 baar jaap karein aur subah mata-pita ka aashirwad zaroor lein.",
-    mantra: "ॐ भूर्भुवः स्वः तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि धियो यो नः प्रचोदयात्",
+  const payload = {
+    message: userQuery,
+    context: context || {},
+    conversationHistory: conversationHistory || [],
   };
+
+  // 1. Try local high-speed Vercel serverless API first (< 1.5s latency, zero cold starts)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+    const res = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify(payload),
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.reply) {
+        return {
+          text: data.reply,
+          remedy: data.remedy,
+          mantra: data.mantra,
+        };
+      }
+    }
+  } catch (localErr) {
+    console.warn("Local Vercel AI route error/timeout, falling back:", localErr);
+  }
+
+  // 2. Try Render live backend
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL 
+      ? `${process.env.NEXT_PUBLIC_API_URL}/ai/chat` 
+      : "https://astro-ai-x5c6.onrender.com/api/v1/ai/chat";
+
+    const res = await fetch(backendUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify(payload),
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && (data.reply || data.text)) {
+        return {
+          text: data.reply || data.text,
+          remedy: data.remedy,
+          mantra: data.mantra,
+        };
+      }
+    }
+  } catch (backendErr) {
+    console.warn("Render backend AI route error/timeout:", backendErr);
+  }
+
+  // 3. Guaranteed intelligent warm human fallback
+  return simulateVedicAstrologerEngine(userQuery, context);
 }

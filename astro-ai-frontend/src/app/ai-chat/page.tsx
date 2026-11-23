@@ -6,7 +6,8 @@ import Link from "next/link";
 import { 
   Sparkles, Send, Trash2, ArrowLeft, Bot, Sun, 
   Search, CheckCheck, Star, CheckCircle2, RefreshCw, 
-  Info, X, Globe, SlidersHorizontal, MoreVertical, Check, ShieldCheck
+  Info, X, Globe, SlidersHorizontal, MoreVertical, Check, ShieldCheck,
+  Mic, MicOff
 } from "lucide-react";
 import MobileAppLayout from "../components/mobile/MobileAppLayout";
 import { AuthUser } from "../components/mobile/AuthScreen";
@@ -214,8 +215,66 @@ export default function AIChatPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeView, setActiveView] = useState<"list" | "chat">("list");
   const [inspectedAstro, setInspectedAstro] = useState<AstrologerPersona | null>(null);
+  const [isListening, setIsListening] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleSpeechRecognition = () => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Aapke browser me voice typing supported nahi hai. Kripya Chrome ya Edge use karein.");
+      return;
+    }
+
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "hi-IN"; // Authentic Hindi & Hinglish voice recognition
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setInputText(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition notice:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Speech recognition startup error:", err);
+      setIsListening(false);
+    }
+  };
 
   // 1. Fetch live astrologers directly from Backend API & MongoDB Atlas
   useEffect(() => {
@@ -346,19 +405,24 @@ export default function AIChatPage() {
     setIsTyping(true);
 
     try {
-      const aiResponse = await sendAIAstrologerMessage(query, {
-        name: user?.name,
-        astrologerName: selectedAstrologer.name,
-        specialty: selectedAstrologer.specialty,
-        title: selectedAstrologer.title,
-      });
+      const currentHistory = chatHistories[astroId] || [];
+      const aiResponse = await sendAIAstrologerMessage(
+        query,
+        {
+          name: user?.name,
+          astrologerName: selectedAstrologer.name,
+          specialty: selectedAstrologer.specialty,
+          title: selectedAstrologer.title,
+        },
+        currentHistory
+      );
 
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: "ai",
         text: aiResponse.text,
-        remedy: aiResponse.remedy || selectedAstrologer.remedy,
-        mantra: aiResponse.mantra || selectedAstrologer.mantra,
+        remedy: aiResponse.remedy || "",
+        mantra: aiResponse.mantra || "",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
@@ -798,14 +862,35 @@ export default function AIChatPage() {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 disabled={isTyping}
-                placeholder={`Ask ${selectedAstrologer.shortName} (e.g. Shaadi kab hogi?)...`}
-                className="flex-1 bg-[#FAF6F0] border-2 border-amber-300/80 rounded-full px-4 py-2 text-xs sm:text-sm text-espresso placeholder-espresso/45 focus:outline-none focus:border-terracotta shadow-2xs disabled:opacity-60"
+                placeholder={isListening ? "Sun rahe hain... Boliye..." : `Ask ${selectedAstrologer.shortName} (e.g. Shaadi kab hogi?)...`}
+                className={`flex-1 bg-[#FAF6F0] border-2 rounded-full px-4 py-2 text-xs sm:text-sm text-espresso placeholder-espresso/45 focus:outline-none focus:border-terracotta shadow-2xs disabled:opacity-60 transition-all ${
+                  isListening ? "border-red-500 ring-2 ring-red-300/50 bg-red-50/30" : "border-amber-300/80"
+                }`}
               />
+
+              {/* Voice Speech-to-Text Microphone Button */}
+              <button
+                type="button"
+                onClick={toggleSpeechRecognition}
+                disabled={isTyping}
+                className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-95 cursor-pointer ${
+                  isListening
+                    ? "bg-red-500 text-white animate-pulse shadow-md shadow-red-500/30"
+                    : "bg-[#FAF6F0] border-2 border-amber-300/80 text-espresso/70 hover:text-terracotta hover:border-terracotta"
+                }`}
+                title={isListening ? "Listening... (Tap to stop)" : "Bol kar poochhein (Voice Typing)"}
+              >
+                {isListening ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </button>
 
               <button
                 type="submit"
                 disabled={!inputText.trim() || isTyping}
-                className="w-10 h-10 rounded-full bg-gradient-to-r from-terracotta to-amber-600 text-white flex items-center justify-center disabled:opacity-40 active:scale-95 shadow-md shadow-terracotta/25 flex-shrink-0 transition-transform"
+                className="w-10 h-10 rounded-full bg-gradient-to-r from-terracotta to-amber-600 text-white flex items-center justify-center disabled:opacity-40 active:scale-95 shadow-md shadow-terracotta/25 flex-shrink-0 transition-transform cursor-pointer"
                 title="Send Question"
               >
                 <Send className="w-4 h-4 translate-x-0.5" />
