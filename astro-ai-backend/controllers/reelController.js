@@ -143,12 +143,101 @@ export const deleteSeries = async (req, res) => {
   }
 };
 
+// Track Reel View (Atomic Real-time counter)
+export const trackView = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await ReelModel.trackView(id);
+    res.json({ success: true, views: result.views });
+  } catch (err) {
+    console.error("⚠️ [Reels API] trackView error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Toggle Reel Like (Idempotent per user)
+export const toggleLike = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId = "guest" } = req.body;
+    const result = await ReelModel.toggleLike(id, userId);
+    res.json({ success: true, likes: result.likes, liked: result.liked });
+  } catch (err) {
+    console.error("⚠️ [Reels API] toggleLike error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Backward-compatible like handler
 export const likeReel = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await ReelModel.like(id);
-    res.json({ success: true, likes: result.likes });
+    const { userId = "guest" } = req.body;
+    const result = await ReelModel.toggleLike(id, userId);
+    res.json({ success: true, likes: result.likes, liked: result.liked });
   } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Track Reel Share (Atomic Real-time counter)
+export const trackShare = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await ReelModel.trackShare(id);
+    res.json({ success: true, sharesCount: result.sharesCount });
+  } catch (err) {
+    console.error("⚠️ [Reels API] trackShare error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Get Reel Comments
+export const getReelComments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const comments = await ReelModel.getComments(id);
+    res.json({ success: true, count: comments.length, comments });
+  } catch (err) {
+    console.error("⚠️ [Reels API] getReelComments error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Add Reel Comment
+export const addReelComment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text, userName, userAvatar, userId } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: "Comment text cannot be empty." });
+    }
+    const result = await ReelModel.addComment(id, {
+      text,
+      userName,
+      userAvatar,
+      userId,
+    });
+    res.status(201).json({
+      success: true,
+      message: "Comment added successfully!",
+      comment: result.comment,
+      commentsCount: result.commentsCount,
+    });
+  } catch (err) {
+    console.error("⚠️ [Reels API] addReelComment error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Delete Reel Comment (Admin or Author moderation)
+export const deleteReelComment = async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const result = await ReelModel.deleteComment(id, commentId);
+    res.json({ success: true, message: "Comment deleted successfully.", commentsCount: result.commentsCount });
+  } catch (err) {
+    console.error("⚠️ [Reels API] deleteReelComment error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };

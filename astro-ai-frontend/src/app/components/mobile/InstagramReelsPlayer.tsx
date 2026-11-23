@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
   Heart, MessageCircle, Share2, ArrowLeft, Volume2, VolumeX, 
   Play, Pause, Sparkles, Send, X, 
-  Flame, Music2, CheckCircle2, Bookmark, Film
+  Flame, Music2, CheckCircle2, Bookmark, Film, Eye
 } from "lucide-react";
 import AstroChatModal from "../AstroChatModal";
 import AuthGateModal from "./AuthGateModal";
@@ -27,6 +27,7 @@ export interface ReelItem {
   symbol: string;
   mantra: string;
   audioName: string;
+  views: number;
   likes: number;
   commentsCount: number;
   sharesCount: number;
@@ -37,11 +38,13 @@ export interface ReelItem {
   seriesPart?: number;
   comments: {
     id: string;
+    commentId?: string;
     userName: string;
     userAvatar: string;
     text: string;
-    timeAgo: string;
-    likes: number;
+    timeAgo?: string;
+    createdAt?: string | Date;
+    likes?: number;
   }[];
 }
 
@@ -108,17 +111,58 @@ export default function InstagramReelsPlayer() {
     setSelectedAstroForChat(astroData);
   };
 
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+
+  const openCommentsForActiveReel = useCallback(async () => {
+    setShowCommentsDrawer(true);
+    const currentReel = allReels[currentIndex];
+    if (!currentReel) return;
+
+    setIsLoadingComments(true);
+    try {
+      const comments = await reelsApi.getComments(currentReel.id);
+      if (Array.isArray(comments)) {
+        setAllReels((prev) =>
+          prev.map((r, i) =>
+            i === currentIndex
+              ? {
+                  ...r,
+                  comments: comments.map((c: any) => ({
+                    id: c.id || c._id || String(Math.random()),
+                    commentId: c.commentId || c.id,
+                    userName: c.userName || "Seeker",
+                    userAvatar:
+                      c.userAvatar ||
+                      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80",
+                    text: c.text,
+                    timeAgo: "Recently",
+                    createdAt: c.createdAt,
+                    likes: c.likes || 0,
+                  })),
+                  commentsCount: comments.length,
+                }
+              : r
+          )
+        );
+      }
+    } catch (e) {
+      console.warn("Comments load error:", e);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [allReels, currentIndex]);
+
   const handleCommentsDrawerOpen = () => {
     try {
       const sessionToken = sessionStorage.getItem("astroai_session_token");
       if (!sessionToken) {
         setAuthFeatureName("Reel Comments");
-        setPendingAuthAction(() => () => setShowCommentsDrawer(true));
+        setPendingAuthAction(() => () => openCommentsForActiveReel());
         setShowAuthGate(true);
         return;
       }
     } catch {}
-    setShowCommentsDrawer(true);
+    openCommentsForActiveReel();
   };
 
   const handleLikeWithAuth = (reelId: string) => {
@@ -137,6 +181,7 @@ export default function InstagramReelsPlayer() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const reelRefs = useRef<(HTMLElement | null)[]>([]);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const viewedReelsRef = useRef<Set<string>>(new Set());
 
   // Fetch Live Reels directly from MongoDB Atlas Backend (Zero Fake/Dummy Fallbacks)
   const fetchReels = useCallback(async () => {
@@ -165,14 +210,28 @@ export default function InstagramReelsPlayer() {
           symbol: r.symbol || "✨",
           mantra: r.mantra || "ॐ शांति शांति शांतिः",
           audioName: r.audioName || "Original Audio • AstroAI Vedic Chants",
+          views: Number(r.views) || 0,
           likes: Number(r.likes) || 0,
-          commentsCount: Number(r.commentsCount) || 0,
+          commentsCount: Number(r.commentsCount) || (r.comments ? r.comments.length : 0),
           sharesCount: Number(r.sharesCount) || 0,
           tags: r.tags || (r.tag ? [r.tag] : ["#DailyUpay", "#AstroReels"]),
           videoUrl: r.videoUrl,
           seriesName: r.seriesName || "",
           seriesPart: r.seriesPart ? Number(r.seriesPart) : undefined,
-          comments: r.comments || [],
+          comments: Array.isArray(r.comments)
+            ? r.comments.map((c: any) => ({
+                id: c.id || c._id || String(Math.random()),
+                commentId: c.commentId || c.id,
+                userName: c.userName || "Bhakt",
+                userAvatar:
+                  c.userAvatar ||
+                  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80",
+                text: c.text,
+                timeAgo: "Recently",
+                createdAt: c.createdAt,
+                likes: c.likes || 0,
+              }))
+            : [],
         }));
 
         setAllReels(mapped);
@@ -191,6 +250,24 @@ export default function InstagramReelsPlayer() {
     window.addEventListener("astroai_reels_updated", handleReelsUpdated);
     return () => window.removeEventListener("astroai_reels_updated", handleReelsUpdated);
   }, [fetchReels]);
+
+  // Track Real-time Views on Active Reel (Atomic MongoDB Sync)
+  useEffect(() => {
+    const active = allReels[currentIndex];
+    if (!active || !active.id || viewedReelsRef.current.has(active.id)) return;
+    viewedReelsRef.current.add(active.id);
+
+    reelsApi
+      .trackView(active.id)
+      .then((res) => {
+        if (res && typeof res.views === "number") {
+          setAllReels((prev) =>
+            prev.map((r, i) => (i === currentIndex ? { ...r, views: res.views } : r))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [currentIndex, allReels]);
 
   // Instagram-Style Intersection Observer (Detect active snapped reel)
   useEffect(() => {
@@ -276,7 +353,16 @@ export default function InstagramReelsPlayer() {
     }
   };
 
-  const handleLikeToggle = (reelId: string) => {
+  const handleLikeToggle = async (reelId: string) => {
+    let userId = "guest";
+    try {
+      const userStr = localStorage.getItem("astroai_auth_user");
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        userId = u.id || u.phone || u.email || "guest";
+      }
+    } catch {}
+
     const reel = allReels.find((r) => r.id === reelId);
     const current = likesState[reelId] || { liked: false, count: reel?.likes || 0 };
     const nextLiked = !current.liked;
@@ -292,7 +378,24 @@ export default function InstagramReelsPlayer() {
     if (nextLiked) {
       setShowHeartBurst(true);
       setTimeout(() => setShowHeartBurst(false), 900);
-      reelsApi.like(reelId).catch(() => {});
+    }
+
+    try {
+      const res = await reelsApi.toggleLike(reelId, userId);
+      if (res && res.success && typeof res.likes === "number") {
+        setLikesState((prev) => ({
+          ...prev,
+          [reelId]: {
+            liked: res.liked,
+            count: res.likes,
+          },
+        }));
+        setAllReels((prev) =>
+          prev.map((r) => (r.id === reelId ? { ...r, likes: res.likes } : r))
+        );
+      }
+    } catch (e) {
+      console.warn("Like sync error:", e);
     }
   };
 
@@ -328,7 +431,11 @@ export default function InstagramReelsPlayer() {
     showToast(nextMuted ? "Sound Muted 🔇" : "Sound Playing 🔊");
   };
 
-  const handleShare = (reel: ReelItem) => {
+  const handleShare = async (reel: ReelItem) => {
+    setAllReels((prev) =>
+      prev.map((r) => (r.id === reel.id ? { ...r, sharesCount: (r.sharesCount || 0) + 1 } : r))
+    );
+
     if (navigator.share) {
       navigator.share({
         title: reel.title,
@@ -339,6 +446,15 @@ export default function InstagramReelsPlayer() {
       navigator.clipboard?.writeText(window.location.href);
       showToast("✨ Reel link copied to clipboard!");
     }
+
+    try {
+      const res = await reelsApi.trackShare(reel.id);
+      if (res && typeof res.sharesCount === "number") {
+        setAllReels((prev) =>
+          prev.map((r) => (r.id === reel.id ? { ...r, sharesCount: res.sharesCount } : r))
+        );
+      }
+    } catch (e) {}
   };
 
   const handleSaveToggle = (reelId: string) => {
@@ -354,24 +470,88 @@ export default function InstagramReelsPlayer() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handlePostComment = (e: React.FormEvent) => {
+  const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentReel = allReels[currentIndex];
     if (!newCommentInput.trim() || !currentReel) return;
 
-    const newComment = {
-      id: Date.now().toString(),
-      userName: "You (Seeker)",
-      userAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80",
-      text: newCommentInput.trim(),
+    let userName = "You (Seeker)";
+    let userId = "guest";
+    let userAvatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80";
+
+    try {
+      const userStr = localStorage.getItem("astroai_auth_user");
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        userName = u.name || (u.phone ? `User ${u.phone.slice(-4)}` : "Bhakt");
+        userId = u.id || u.phone || u.email || "guest";
+        if (u.avatar) userAvatar = u.avatar;
+      }
+    } catch {}
+
+    const commentText = newCommentInput.trim();
+    setNewCommentInput("");
+
+    const tempComment = {
+      id: `temp-${Date.now()}`,
+      commentId: `temp-${Date.now()}`,
+      userName,
+      userAvatar,
+      text: commentText,
       timeAgo: "Just now",
       likes: 0,
     };
 
-    currentReel.comments.unshift(newComment);
-    currentReel.commentsCount += 1;
-    setNewCommentInput("");
+    setAllReels((prev) =>
+      prev.map((r, i) =>
+        i === currentIndex
+          ? {
+              ...r,
+              comments: [tempComment, ...r.comments],
+              commentsCount: r.commentsCount + 1,
+            }
+          : r
+      )
+    );
+
     showToast("Comment posted successfully ✨");
+
+    try {
+      const res = await reelsApi.addComment(currentReel.id, {
+        text: commentText,
+        userName,
+        userAvatar,
+        userId,
+      });
+
+      if (res && res.success && res.comment) {
+        setAllReels((prev) =>
+          prev.map((r, i) =>
+            i === currentIndex
+              ? {
+                  ...r,
+                  comments: [
+                    {
+                      id: res.comment.id || res.comment._id,
+                      commentId: res.comment.commentId || res.comment.id,
+                      userName: res.comment.userName || userName,
+                      userAvatar: res.comment.userAvatar || userAvatar,
+                      text: res.comment.text,
+                      timeAgo: "Just now",
+                      createdAt: res.comment.createdAt,
+                      likes: 0,
+                    },
+                    ...r.comments.filter((c) => c.id !== tempComment.id),
+                  ],
+                  commentsCount: res.commentsCount || r.comments.length,
+                }
+              : r
+          )
+        );
+      }
+    } catch (err) {
+      console.warn("Failed to persist comment:", err);
+    }
   };
 
   const formatTime = (secs: number) => {
@@ -544,7 +724,7 @@ export default function InstagramReelsPlayer() {
               <div className="flex-1" />
 
               {/* 2. RIGHT-SIDE ACTION BUTTONS */}
-              <div className="absolute right-3 bottom-20 z-30 flex flex-col items-center gap-4">
+              <div className="absolute right-3 bottom-20 z-30 flex flex-col items-center gap-3.5">
                 {/* Astrologer Avatar + Plus */}
                 <div className="relative group">
                   <button
@@ -583,19 +763,29 @@ export default function InstagramReelsPlayer() {
                   </button>
                 </div>
 
+                {/* Real Views Counter */}
+                <div className="flex flex-col items-center gap-0.5 select-none" title="Real-time Views">
+                  <div className="w-10 h-10 rounded-full bg-black/40 border border-white/20 flex items-center justify-center backdrop-blur-md text-amber-300">
+                    <Eye className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <span className="text-[10px] font-bold text-white drop-shadow-md">
+                    {(reel.views || 0).toLocaleString()}
+                  </span>
+                </div>
+
                 {/* Like Button */}
                 <button
                   onClick={() => handleLikeWithAuth(reel.id)}
-                  className="flex flex-col items-center gap-1 active:scale-80 transition-transform cursor-pointer"
+                  className="flex flex-col items-center gap-0.5 active:scale-80 transition-transform cursor-pointer"
                 >
-                  <div className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md border ${
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md border ${
                     isLiked 
                       ? "bg-rose-500/20 border-rose-500 text-rose-500" 
                       : "bg-black/40 border-white/20 text-white hover:bg-black/60"
                   }`}>
-                    <Heart className={`w-6 h-6 transition-all ${isLiked ? "fill-rose-500 text-rose-500 scale-110" : ""}`} />
+                    <Heart className={`w-5 h-5 transition-all ${isLiked ? "fill-rose-500 text-rose-500 scale-110" : ""}`} />
                   </div>
-                  <span className="text-[11px] font-bold text-white drop-shadow-md">
+                  <span className="text-[10px] font-bold text-white drop-shadow-md">
                     {likeCount.toLocaleString()}
                   </span>
                 </button>
@@ -603,12 +793,12 @@ export default function InstagramReelsPlayer() {
                 {/* Comments Button */}
                 <button
                   onClick={handleCommentsDrawerOpen}
-                  className="flex flex-col items-center gap-1 active:scale-80 transition-transform cursor-pointer"
+                  className="flex flex-col items-center gap-0.5 active:scale-80 transition-transform cursor-pointer"
                 >
-                  <div className="w-11 h-11 rounded-full bg-black/40 border border-white/20 flex items-center justify-center backdrop-blur-md text-white hover:bg-black/60">
-                    <MessageCircle className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-full bg-black/40 border border-white/20 flex items-center justify-center backdrop-blur-md text-white hover:bg-black/60">
+                    <MessageCircle className="w-5 h-5" />
                   </div>
-                  <span className="text-[11px] font-bold text-white drop-shadow-md">
+                  <span className="text-[10px] font-bold text-white drop-shadow-md">
                     {reel.commentsCount}
                   </span>
                 </button>
@@ -616,12 +806,12 @@ export default function InstagramReelsPlayer() {
                 {/* Share Button */}
                 <button
                   onClick={() => handleShare(reel)}
-                  className="flex flex-col items-center gap-1 active:scale-80 transition-transform cursor-pointer"
+                  className="flex flex-col items-center gap-0.5 active:scale-80 transition-transform cursor-pointer"
                 >
-                  <div className="w-11 h-11 rounded-full bg-black/40 border border-white/20 flex items-center justify-center backdrop-blur-md text-white hover:bg-black/60">
-                    <Share2 className="w-5 h-5 -rotate-12" />
+                  <div className="w-10 h-10 rounded-full bg-black/40 border border-white/20 flex items-center justify-center backdrop-blur-md text-white hover:bg-black/60">
+                    <Share2 className="w-4 h-4 -rotate-12" />
                   </div>
-                  <span className="text-[11px] font-bold text-white drop-shadow-md">
+                  <span className="text-[10px] font-bold text-white drop-shadow-md">
                     {reel.sharesCount}
                   </span>
                 </button>
@@ -629,21 +819,21 @@ export default function InstagramReelsPlayer() {
                 {/* Bookmark Button */}
                 <button
                   onClick={() => handleSaveToggle(reel.id)}
-                  className="flex flex-col items-center gap-1 active:scale-80 transition-transform cursor-pointer"
+                  className="flex flex-col items-center gap-0.5 active:scale-80 transition-transform cursor-pointer"
                 >
-                  <div className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md border ${
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md border ${
                     isSaved ? "bg-amber-400/20 border-amber-400 text-amber-400" : "bg-black/40 border-white/20 text-white"
                   }`}>
-                    <Bookmark className={`w-5 h-5 ${isSaved ? "fill-amber-400" : ""}`} />
+                    <Bookmark className={`w-4 h-4 ${isSaved ? "fill-amber-400" : ""}`} />
                   </div>
                 </button>
 
                 {/* Music Disc */}
-                <div className={`relative w-10 h-10 rounded-full border-2 border-amber-300/70 p-1 bg-black/70 overflow-hidden shadow-lg ${
+                <div className={`relative w-9 h-9 rounded-full border-2 border-amber-300/70 p-1 bg-black/70 overflow-hidden shadow-lg ${
                   isActive && isPlaying ? "animate-spin" : ""
                 }`}>
                   <div className="w-full h-full rounded-full bg-gradient-to-tr from-terracotta to-amber-500 flex items-center justify-center text-white">
-                    <Music2 className="w-4 h-4 text-white" />
+                    <Music2 className="w-3.5 h-3.5 text-white" />
                   </div>
                 </div>
               </div>
@@ -757,32 +947,45 @@ export default function InstagramReelsPlayer() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {activeReel.comments.map((comment) => (
-                <div key={comment.id} className="flex items-start gap-3 text-xs">
-                  <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 flex-shrink-0 bg-espresso">
-                    <Image
-                      src={comment.userAvatar}
-                      alt={comment.userName}
-                      width={32}
-                      height={32}
-                      unoptimized
-                      className="object-cover w-full h-full"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-xs">{comment.userName}</span>
-                      <span className="text-[10px] text-white/50">{comment.timeAgo}</span>
-                    </div>
-                    <p className="text-white/85 text-xs mt-0.5 leading-relaxed">
-                      {comment.text}
-                    </p>
-                  </div>
-                  <button className="text-white/40 hover:text-rose-500 pt-1">
-                    <Heart className="w-3.5 h-3.5" />
-                  </button>
+              {isLoadingComments ? (
+                <div className="flex flex-col items-center justify-center py-12 text-white/50 space-y-2">
+                  <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-semibold">Comments load ho rahe hain...</span>
                 </div>
-              ))}
+              ) : activeReel.comments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 space-y-2">
+                  <MessageCircle className="w-8 h-8 text-white/30" />
+                  <p className="text-xs font-bold text-white/80">Abhi tak koi comment nahi hai</p>
+                  <p className="text-[11px] text-white/50">Pehle vyakti banein jo is reel par comment karein! ✨</p>
+                </div>
+              ) : (
+                activeReel.comments.map((comment) => (
+                  <div key={comment.id} className="flex items-start gap-3 text-xs">
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 flex-shrink-0 bg-espresso">
+                      <Image
+                        src={comment.userAvatar}
+                        alt={comment.userName}
+                        width={32}
+                        height={32}
+                        unoptimized
+                        className="object-cover w-full h-full"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs">{comment.userName}</span>
+                        <span className="text-[10px] text-white/50">{comment.timeAgo || "Recently"}</span>
+                      </div>
+                      <p className="text-white/85 text-xs mt-0.5 leading-relaxed">
+                        {comment.text}
+                      </p>
+                    </div>
+                    <button className="text-white/40 hover:text-rose-500 pt-1">
+                      <Heart className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="px-4 py-2 border-t border-white/10 flex items-center justify-between text-lg">

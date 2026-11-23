@@ -204,9 +204,41 @@ export const reelsApi = {
       method: "DELETE",
     });
   },
-  like: async (id: string) => {
-    return await apiRequest<{ success: boolean; likes: number }>(`/reels/${id}/like`, {
+  like: async (id: string, userId?: string) => {
+    return await apiRequest<{ success: boolean; likes: number; liked: boolean }>(`/reels/${id}/like`, {
       method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+  },
+  toggleLike: async (id: string, userId?: string) => {
+    return await apiRequest<{ success: boolean; likes: number; liked: boolean }>(`/reels/${id}/like`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+  },
+  trackView: async (id: string) => {
+    return await apiRequest<{ success: boolean; views: number }>(`/reels/${id}/view`, {
+      method: "POST",
+    });
+  },
+  trackShare: async (id: string) => {
+    return await apiRequest<{ success: boolean; sharesCount: number }>(`/reels/${id}/share`, {
+      method: "POST",
+    });
+  },
+  getComments: async (id: string) => {
+    const data = await apiRequest<{ success: boolean; comments: any[] }>(`/reels/${id}/comments`);
+    return data?.comments || [];
+  },
+  addComment: async (id: string, commentData: { text: string; userName?: string; userAvatar?: string; userId?: string }) => {
+    return await apiRequest<{ success: boolean; comment: any; commentsCount: number }>(`/reels/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify(commentData),
+    });
+  },
+  deleteComment: async (id: string, commentId: string) => {
+    return await apiRequest<{ success: boolean; message: string; commentsCount: number }>(`/reels/${id}/comments/${commentId}`, {
+      method: "DELETE",
     });
   },
   uploadVideo: async (file: File) => {
