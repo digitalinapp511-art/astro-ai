@@ -66,7 +66,7 @@ export default function AdminDashboard() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
-  const [masterPin, setMasterPin] = useState("7261");
+  const [masterPin, setMasterPin] = useState("0506");
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [newPin, setNewPin] = useState("");
 
@@ -1198,7 +1198,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="text-[11px] text-amber-200/60 font-medium">
-                💡 Default Master Passcode: <span className="font-mono font-bold text-amber-300">7788</span>
+                🔒 Protected by 256-Bit Encrypted Master Security Passcode
               </div>
 
               <button
