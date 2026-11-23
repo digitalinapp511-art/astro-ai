@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { X, Send, ShieldCheck, Sparkles, User, Clock } from "lucide-react";
+import { X, Send, ShieldCheck, Sparkles, User, Clock, Mic, MicOff } from "lucide-react";
 import { sendAIAstrologerMessage } from "../services/aiChatService";
 
 export interface ChatAstrologer {
@@ -44,7 +44,54 @@ export default function AstroChatModal({ astrologer, onClose }: AstroChatModalPr
   ]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleSpeechRecognition = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Aapke browser me voice typing supported nahi hai. Kripya Chrome ya Edge use karein.");
+      return;
+    }
+
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "hi-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) setInputText(transcript.trim());
+      };
+      recognition.onerror = (event: any) => {
+        if (event.error !== "no-speech") setIsListening(false);
+      };
+      recognition.onend = () => setIsListening(false);
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Speech recognition startup error:", err);
+      setIsListening(false);
+    }
+  };
 
   // Auto scroll to bottom
   const scrollToBottom = () => {
@@ -243,15 +290,31 @@ export default function AstroChatModal({ astrologer, onClose }: AstroChatModalPr
         >
           <input
             type="text"
-            placeholder="Type your question for Pandit ji..."
+            placeholder={isListening ? "Sun rahe hain... Boliye..." : "Type your question for Pandit ji..."}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            className="flex-1 px-4 py-2.5 rounded-full border border-peach bg-astro-bg text-espresso text-sm focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+            disabled={isTyping}
+            className={`flex-1 px-4 py-2.5 rounded-full border bg-astro-bg text-espresso text-sm focus:outline-none focus:ring-2 focus:ring-terracotta/30 transition-all ${
+              isListening ? "border-red-500 ring-2 ring-red-300/50 bg-red-50/30" : "border-peach"
+            }`}
           />
           <button
+            type="button"
+            onClick={toggleSpeechRecognition}
+            disabled={isTyping}
+            className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-95 cursor-pointer ${
+              isListening
+                ? "bg-red-500 text-white animate-pulse shadow-md shadow-red-500/30"
+                : "bg-astro-bg border border-peach text-espresso/70 hover:text-terracotta hover:border-terracotta"
+            }`}
+            title={isListening ? "Listening... (Tap to stop)" : "Bol kar poochhein (Voice Typing)"}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+          <button
             type="submit"
-            disabled={!inputText.trim()}
-            className="w-11 h-11 rounded-full bg-terracotta hover:bg-terracotta-hover disabled:opacity-40 text-astro-bg flex items-center justify-center shadow-md transition-all flex-shrink-0"
+            disabled={!inputText.trim() || isTyping}
+            className="w-11 h-11 rounded-full bg-terracotta hover:bg-terracotta-hover disabled:opacity-40 text-astro-bg flex items-center justify-center shadow-md transition-all flex-shrink-0 cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>

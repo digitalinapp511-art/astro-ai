@@ -251,17 +251,19 @@ export default function AIChatPage() {
 
       recognition.onresult = (event: any) => {
         let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
         if (transcript) {
-          setInputText(transcript);
+          setInputText(transcript.trim());
         }
       };
 
       recognition.onerror = (event: any) => {
         console.warn("Speech recognition notice:", event.error);
-        setIsListening(false);
+        if (event.error !== "no-speech") {
+          setIsListening(false);
+        }
       };
 
       recognition.onend = () => {
