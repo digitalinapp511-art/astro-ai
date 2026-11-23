@@ -41,10 +41,26 @@ export function simulateVedicAstrologerEngine(
   const isAnanya = astroName.toLowerCase().includes("ananya");
 
   const address = isMaa ? "Beta" : (userName !== "Seeker" ? userName : "Bhakta");
-  const blessing = isMaa ? "Kalyan ho beta, sada khush raho! Maa Gayatri ka aashirwad hamesha tumhare sath hai." 
+  const blessing = isMaa ? "Kalyan ho mere bacche, sada khush raho! Maa Gayatri ka aashirwad hamesha tumhare sath hai." 
     : isAcharya ? `Pranam ${userName}! Bhagwan Ganesh aur Devguru Brihaspati ka aashirwad aap par bana rahe.`
     : isAnanya ? `Namaste ${userName}! Prem aur vishwas hi jeevan ki sabse badi shakti hai.`
     : `Hari Om ${userName}! Surya Dev ki kripa se aapka jeevan tejomay ho.`;
+
+  // 0. Academic, Math Formulas, Equations, Science
+  if (
+    q.includes("a+b") || q.includes("(a+b)") || q.includes("square") || q.includes("squre") ||
+    q.includes("formula") || q.includes("math") || q.includes("ganit") || q.includes("2+2") ||
+    q.includes("plus") || q.includes("minus") || q.includes("multiply") || q.includes("divide")
+  ) {
+    let mathAnswer = "(a + b)² = a² + 2ab + b² (a square plus 2ab plus b square)";
+    if (q.includes("a-b")) mathAnswer = "(a - b)² = a² - 2ab + b²";
+    if (q.includes("a2-b2") || q.includes("a^2-b^2")) mathAnswer = "a² - b² = (a - b)(a + b)";
+    return {
+      text: `${blessing} \n\nBeta, ${mathAnswer} hota hai! Chahe ganit ke sutra hon ya jeevan ke niyam, jab tak aadhar aur calculation satik hain, parinam sadaiv safal hota hai. Khoob dhyan lagakar padhai karo aur aage badho!`,
+      remedy: "",
+      mantra: "",
+    };
+  }
 
   // 1. Greetings (Ram Ram, Pranam, Namaste, Jai Mata Di, etc.)
   if (
@@ -122,11 +138,11 @@ export function simulateVedicAstrologerEngine(
     };
   }
 
-  // 7. General Human Vedic Blessing
+  // 7. General Inquiry / Casual Conversation
   return {
-    text: `${blessing} \n\nAapke dwara poochi gayi baat par grah-gochar ka aakalan karne par aane wala samay dhyan aur dhairya se aage badhne ka sanket de raha hai. Devguru Brihaspati ka aashirwad aapke chart par shubh fal dega. Apne lakshya par bharosa rakhein.`,
-    remedy: "Pratidin subah mata-pita ka aashirwad lein aur Gayatri Mantra ka 11 baar shant man se jaap karein.",
-    mantra: "ॐ भूर्भुवः स्वः तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि धियो यो नः प्रचोदयात्"
+    text: `${blessing} \n\nBeta, aapne jo poocha: "${userQuery}" — mera yahi prem aur aashirwad hai ki aap sadaiv gyan, sadbuddhi aur dhairya se aage badhein. Agar aapko apni Kundli, vivah, career, parivar ya kisi grah-dasha se juda koi prashna poochna ho, toh bina sankoch ke bataiye!`,
+    remedy: "",
+    mantra: "",
   };
 }
 
