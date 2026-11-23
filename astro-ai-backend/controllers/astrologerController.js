@@ -15,6 +15,13 @@ export const getAllAstrologers = async (req, res) => {
   }
 };
 
+const defaultAstrologerAvatars = [
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
+  "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80",
+  "https://images.unsplash.com/photo-1566492031773-4f4e44671857?auto=format&fit=crop&w=400&q=80",
+];
+
 // 2. POST Add New Astrologer
 export const addAstrologer = async (req, res) => {
   try {
@@ -24,6 +31,8 @@ export const addAstrologer = async (req, res) => {
       return res.status(400).json({ success: false, message: "Naam likhna zaroori hai!" });
     }
 
+    const randomAvatar = defaultAstrologerAvatars[Math.floor(Math.random() * defaultAstrologerAvatars.length)];
+
     const newAstrologer = await AstrologerModel.create({
       name: name.trim(),
       title: title ? title.trim() : "Vedic Astrologer",
@@ -32,7 +41,7 @@ export const addAstrologer = async (req, res) => {
       pricePerMin: Number(pricePerMin) || 20,
       specialty: specialty || "General Jyotish",
       languages: languages || ["Hindi", "English"],
-      image: image || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+      image: image && image.trim() ? image.trim() : randomAvatar,
     });
 
     res.status(201).json({

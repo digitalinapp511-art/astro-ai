@@ -97,7 +97,7 @@ export default function AdminDashboard() {
   const [newAstroExp, setNewAstroExp] = useState("10+ Yrs Exp");
   const [newAstroPrice, setNewAstroPrice] = useState(25);
   const [newAstroSpecialty, setNewAstroSpecialty] = useState("Kundli Dosh, Vivah");
-  const [newAstroImage, setNewAstroImage] = useState("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80");
+  const [newAstroImage, setNewAstroImage] = useState("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80");
   const [editingAstro, setEditingAstro] = useState<Astrologer | null>(null);
   const [isSavingAstro, setIsSavingAstro] = useState(false);
 
@@ -676,6 +676,16 @@ export default function AdminDashboard() {
     saveAstrologers(updated);
     setNewAstroName("");
     setNewAstroTitle("");
+
+    // Cycle to next portrait preset for next onboarded astrologer
+    const avatarList = [
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
+      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80",
+      "https://images.unsplash.com/photo-1566492031773-4f4e44671857?auto=format&fit=crop&w=400&q=80",
+    ];
+    const nextIdx = (avatarList.indexOf(newAstroImage) + 1) % avatarList.length;
+    setNewAstroImage(avatarList[nextIdx] || avatarList[0]);
 
     // Sync with backend API
     astrologersApi.create(newAstro).catch(() => {});
@@ -1749,6 +1759,42 @@ export default function AdminDashboard() {
                     onChange={(e) => setNewAstroSpecialty(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl border border-peach bg-astro-bg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-terracotta/30"
                   />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label className="block text-[11px] font-bold text-espresso/70 mb-1">
+                    PROFILE PHOTO / DP (Image Link Paste Karein Ya Avatar Chunein)
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={newAstroImage}
+                      onChange={(e) => setNewAstroImage(e.target.value)}
+                      className="flex-1 w-full px-3.5 py-2 rounded-xl border border-peach bg-astro-bg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+                    />
+                    <div className="flex items-center gap-2">
+                      {[
+                        { url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80", label: "Pandit Ji 1" },
+                        { url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80", label: "Pandit Ji 2" },
+                        { url: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80", label: "Acharya" },
+                        { url: "https://images.unsplash.com/photo-1566492031773-4f4e44671857?auto=format&fit=crop&w=400&q=80", label: "Jyotish" },
+                        { url: "https://images.unsplash.com/photo-1580894732444-8ecded7900cd?auto=format&fit=crop&w=400&q=80", label: "Maa Gayatri" },
+                      ].map((preset, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setNewAstroImage(preset.url)}
+                          className={`w-9 h-9 rounded-xl overflow-hidden border-2 transition-transform active:scale-90 ${
+                            newAstroImage === preset.url ? "border-terracotta ring-2 ring-terracotta/40 scale-105" : "border-peach opacity-70 hover:opacity-100"
+                          }`}
+                          title={`Select ${preset.label}`}
+                        >
+                          <img src={preset.url} alt={preset.label} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="sm:col-span-3 flex justify-end">
