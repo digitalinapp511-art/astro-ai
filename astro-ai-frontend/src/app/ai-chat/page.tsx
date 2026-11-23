@@ -820,15 +820,14 @@ export default function AIChatPage() {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <div className="bg-white border-2 border-amber-200 rounded-2xl p-2.5 shadow-2xs flex items-center gap-2 text-espresso">
-                    <Sun className="w-4 h-4 text-amber-500 animate-spin-slow" />
-                    <span className="text-xs font-semibold text-espresso/80">
-                      {selectedAstrologer.shortName} grah-nakshatra calculate kar rahe hain...
+                  <div className="bg-white border border-amber-200 rounded-2xl px-3.5 py-2 shadow-2xs flex items-center gap-2 text-espresso">
+                    <span className="text-xs font-medium text-espresso/70">
+                      {selectedAstrologer.shortName} is typing
                     </span>
-                    <span className="inline-flex gap-1 ml-1">
+                    <span className="inline-flex gap-1 items-center ml-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-terracotta animate-bounce" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-terracotta animate-bounce delay-100" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-terracotta animate-bounce delay-200" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-terracotta animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-terracotta animate-bounce [animation-delay:300ms]" />
                     </span>
                   </div>
                 </div>
@@ -864,7 +863,7 @@ export default function AIChatPage() {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 disabled={isTyping}
-                placeholder={isListening ? "Sun rahe hain... Boliye..." : `Ask ${selectedAstrologer.shortName} (e.g. Shaadi kab hogi?)...`}
+                placeholder={isListening ? "Sun rahe hain... Boliye..." : `Ask ${selectedAstrologer.shortName} anything (e.g. Career, Vivah, Kundli)...`}
                 className={`flex-1 bg-[#FAF6F0] border-2 rounded-full px-4 py-2 text-xs sm:text-sm text-espresso placeholder-espresso/45 focus:outline-none focus:border-terracotta shadow-2xs disabled:opacity-60 transition-all ${
                   isListening ? "border-red-500 ring-2 ring-red-300/50 bg-red-50/30" : "border-amber-300/80"
                 }`}
